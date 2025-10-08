@@ -241,32 +241,14 @@ function deleteEditingItem(){
 }
 
 // QR generation / scanning for items
-function loadScriptOnce(src){
-  return new Promise((resolve, reject)=>{
-    const existing = document.querySelector(`script[src="${src}"]`);
-    if(existing){ existing.addEventListener('load', ()=> resolve()); if(existing.readyState==='complete') resolve(); return; }
-    const s = document.createElement('script'); s.src = src; s.async = true;
-    s.onload = ()=> resolve(); s.onerror = ()=> reject(new Error('load failed'));
-    document.head.appendChild(s);
-  });
-}
-async function ensureQRCode(){
-  if(window.QRCode) return;
-  try{
-    await loadScriptOnce('https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js');
-  }catch{
-    await loadScriptOnce('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js');
-  }
-}
-async function showItemQr(it){
+function showItemQr(it){
   openItemDialog(it.id);
-  await ensureQRCode();
   const status = document.getElementById('qrStatus');
   status.textContent = '';
   
   console.log('QRCode available:', !!window.QRCode);
   if(!window.QRCode){ 
-    status.textContent = 'تعذر تحميل مكتبة QR'; 
+    status.textContent = 'مكتبة QR غير محملة - تأكد من الاتصال بالإنترنت'; 
     console.error('QRCode library not loaded');
     return; 
   }
@@ -278,26 +260,25 @@ async function showItemQr(it){
   el.innerHTML='';
   status.textContent = 'جاري توليد الرمز...';
   
-  // Try simple text first
-  try {
-    const qrString = await window.QRCode.toString(payload, { type: 'svg' });
-    console.log('QR generated as SVG');
-    el.innerHTML = qrString;
-    status.textContent = 'تم توليد الرمز';
-  } catch (err) {
-    console.error('SVG generation failed:', err);
-    // Fallback to canvas
-    try {
-      const canvas = document.createElement('canvas');
-      await window.QRCode.toCanvas(canvas, payload, { width: 220, margin: 1 });
-      console.log('QR generated as canvas');
-      el.appendChild(canvas);
-      status.textContent = 'تم توليد الرمز';
-    } catch (canvasErr) {
-      console.error('Canvas generation failed:', canvasErr);
-      status.textContent = 'فشل توليد رمز QR: ' + canvasErr.message;
+  // Use callback-based toCanvas (more reliable)
+  const canvas = document.createElement('canvas');
+  window.QRCode.toCanvas(canvas, payload, { 
+    width: 220, 
+    margin: 1,
+    color: {
+      dark: '#000000',
+      light: '#FFFFFF'
     }
-  }
+  }, function (error) {
+    if (error) {
+      console.error('QR generation failed:', error);
+      status.textContent = 'فشل توليد رمز QR: ' + error.message;
+    } else {
+      console.log('QR generated successfully');
+      el.appendChild(canvas);
+      status.textContent = 'تم توليد الرمز بنجاح';
+    }
+  });
 }
 
 let scanRAF=null, scanStream=null;
@@ -356,21 +337,41 @@ function init(){
   document.getElementById('itemDialog').addEventListener('close', ()=>{});
   document.getElementById('deleteItemBtn').onclick = deleteEditingItem;
   document.getElementById('itemForm').addEventListener('submit', (e)=>{ e.preventDefault(); submitItemDialog(true); });
-  document.getElementById('genQrBtn').addEventListener('click', (e)=>{ e.preventDefault();
+  document.getElementById('genQrBtn').addEventListener('click', (e)=>{ 
+    e.preventDefault();
     const status = document.getElementById('qrStatus');
     status.textContent = '';
+    
     // Validate fields
     const name = document.getElementById('f_name').value.trim();
-    if(!name){ status.textContent = 'الرجاء إدخال اسم العتاد أولاً'; return; }
+    if(!name){ 
+      status.textContent = 'الرجاء إدخال اسم العتاد أولاً'; 
+      return; 
+    }
+    
     // Ensure item exists (save if new)
     if(!editingItemId){
-      submitItemDialog(true);
-      const it = state.inventory[state.inventory.length-1];
-      if(!it){ status.textContent = 'تعذر حفظ العتاد'; return; }
-      showItemQr(it);
+      // Save the item first
+      const initialQty = Number(document.getElementById('f_initialQty').value||0);
+      const totalQty = Number(document.getElementById('f_totalQty').value||0);
+      const notes = document.getElementById('f_notes').value.trim();
+      
+      const newItem = { id: uid(), name, initialQty, totalQty, notes };
+      if(useCloud && window.cloud){ 
+        window.cloud.addInventory(newItem);
+        // Wait a moment for cloud sync, then show QR
+        setTimeout(() => showItemQr(newItem), 500);
+      } else {
+        state.inventory.push(newItem);
+        save(STORAGE_KEYS.INVENTORY);
+        showItemQr(newItem);
+      }
     } else {
       const it = state.inventory.find(i=>i.id===editingItemId);
-      if(!it){ status.textContent = 'العنصر غير موجود'; return; }
+      if(!it){ 
+        status.textContent = 'العنصر غير موجود'; 
+        return; 
+      }
       showItemQr(it);
     }
   });
