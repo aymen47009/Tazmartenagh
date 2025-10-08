@@ -146,6 +146,7 @@ function renderLoans(filter=''){
       </div>
       <div class="meta">${it.date||''}</div>
       <div class="actions">
+        <button class="btn" data-act="viewReturns">عرض الإرجاعات</button>
         <button class="btn ${isFullyReturned ? 'secondary' : ''}" data-act="return" ${isFullyReturned ? 'disabled' : ''}>${isFullyReturned ? 'مُرجع' : 'إرجاع'}</button>
         <button class="btn danger" data-act="del">حذف</button>
       </div>`;
@@ -158,6 +159,17 @@ function renderLoans(filter=''){
         renderInventory(document.getElementById('inventorySearch').value||'');
         renderReports();
       }
+    };
+    el.querySelector('[data-act="viewReturns"]').onclick = ()=>{
+      // Navigate to returns tab and filter by this loan
+      goto('returns');
+      // Set search filter to show only returns for this loan
+      const searchInput = document.getElementById('returnSearch');
+      searchInput.value = it.itemName; // Filter by item name
+      // Store the loan ID for additional filtering
+      window.currentLoanFilter = it.id;
+      // Render returns with filter
+      renderReturns(it.itemName);
     };
     el.querySelector('[data-act="return"]').onclick = ()=>{
       if(isFullyReturned) {
@@ -184,9 +196,19 @@ function renderLoans(filter=''){
 function renderReturns(filter=''){
   const list = document.getElementById('returnsList');
   const q = filter.trim();
-  const items = state.returns
-    .filter(r=> [r.itemName,r.notes].some(x=> (x||'').includes(q)))
-    .sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+  let items = state.returns;
+  
+  // If we have a specific loan filter, show only returns for that loan
+  if(window.currentLoanFilter) {
+    items = items.filter(r => r.loanId === window.currentLoanFilter);
+  }
+  
+  // Apply text filter if provided
+  if(q) {
+    items = items.filter(r=> [r.itemName,r.notes].some(x=> (x||'').includes(q)));
+  }
+  
+  items = items.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
   list.innerHTML='';
   for(const it of items){
     // Find the loan to get borrower name
@@ -540,7 +562,13 @@ function init(){
     }
     (e.target).reset(); document.getElementById('ret_date').value = todayStr(); document.getElementById('ret_damaged').value = 0;
   });
-  document.getElementById('returnSearch').addEventListener('input', (e)=> renderReturns(e.target.value));
+  document.getElementById('returnSearch').addEventListener('input', (e)=> {
+    // Clear loan filter when user manually searches
+    if(e.target.value === '') {
+      window.currentLoanFilter = null;
+    }
+    renderReturns(e.target.value);
+  });
 
   // Install prompt
   let deferredPrompt=null;
