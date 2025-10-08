@@ -261,14 +261,18 @@ async function ensureQRCode(){
 async function showItemQr(it){
   openItemDialog(it.id);
   await ensureQRCode();
-  if(!window.QRCode){ alert('تعذر تحميل مكتبة QR'); return; }
+  const status = document.getElementById('qrStatus');
+  status.textContent = '';
+  if(!window.QRCode){ status.textContent = 'تعذر تحميل مكتبة QR'; return; }
   const payload = JSON.stringify({ t:'item', id: it.id, name: it.name });
   const el = document.getElementById('qrContainer');
   el.innerHTML='';
   const canvas = document.createElement('canvas');
+  status.textContent = 'جاري توليد الرمز...';
   window.QRCode.toCanvas(canvas, payload, { width: 220, margin: 1 }, (err)=>{
-    if(err){ el.textContent = 'فشل توليد رمز QR'; return; }
+    if(err){ status.textContent = 'فشل توليد رمز QR'; return; }
     el.appendChild(canvas);
+    status.textContent = 'تم توليد الرمز';
   });
 }
 
@@ -279,7 +283,7 @@ async function startScan(videoEl, onResult){
     videoEl.srcObject = scanStream;
     await videoEl.play();
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const loop = ()=>{
       if(videoEl.readyState === videoEl.HAVE_ENOUGH_DATA){
         canvas.width = videoEl.videoWidth; canvas.height = videoEl.videoHeight;
@@ -329,8 +333,22 @@ function init(){
   document.getElementById('deleteItemBtn').onclick = deleteEditingItem;
   document.getElementById('itemForm').addEventListener('submit', (e)=>{ e.preventDefault(); submitItemDialog(true); });
   document.getElementById('genQrBtn').addEventListener('click', (e)=>{ e.preventDefault();
-    if(!editingItemId){ submitItemDialog(true); const it = state.inventory[state.inventory.length-1]; showItemQr(it); }
-    else { const it = state.inventory.find(i=>i.id===editingItemId); if(it) showItemQr(it); }
+    const status = document.getElementById('qrStatus');
+    status.textContent = '';
+    // Validate fields
+    const name = document.getElementById('f_name').value.trim();
+    if(!name){ status.textContent = 'الرجاء إدخال اسم العتاد أولاً'; return; }
+    // Ensure item exists (save if new)
+    if(!editingItemId){
+      submitItemDialog(true);
+      const it = state.inventory[state.inventory.length-1];
+      if(!it){ status.textContent = 'تعذر حفظ العتاد'; return; }
+      showItemQr(it);
+    } else {
+      const it = state.inventory.find(i=>i.id===editingItemId);
+      if(!it){ status.textContent = 'العنصر غير موجود'; return; }
+      showItemQr(it);
+    }
   });
   document.getElementById('scanQrBtn').addEventListener('click', async (e)=>{ e.preventDefault();
     document.getElementById('scanContainer').classList.remove('hidden');
