@@ -241,15 +241,22 @@ function deleteEditingItem(){
 }
 
 // QR generation / scanning for items
-function showItemQr(it){
+async function showItemQr(it){
   openItemDialog(it.id);
   const status = document.getElementById('qrStatus');
   status.textContent = '';
   
-  console.log('QRCode available:', !!window.QRCode);
+  // Wait for QRCode library to load (max 3 seconds)
+  let attempts = 0;
+  while (!window.QRCode && attempts < 30) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    attempts++;
+  }
+  
+  console.log('QRCode available:', !!window.QRCode, 'after', attempts * 100, 'ms');
   if(!window.QRCode){ 
     status.textContent = 'مكتبة QR غير محملة - تأكد من الاتصال بالإنترنت'; 
-    console.error('QRCode library not loaded');
+    console.error('QRCode library not loaded after timeout');
     return; 
   }
   

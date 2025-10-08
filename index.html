@@ -205,8 +205,20 @@
     </footer>
 
     <!-- QR libraries (CDN) -->
-    <script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js"></script>
-    <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" onerror="loadQRFallback()"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <script>
+      function loadQRFallback() {
+        console.log('Loading QR fallback...');
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js';
+        script.onerror = () => {
+          console.error('All QR CDNs failed');
+          window.QRCode = null;
+        };
+        document.head.appendChild(script);
+      }
+    </script>
 
     <!-- Firebase config (user-provided) and integration (optional) -->
     <script src="firebase-config.js" defer></script>
