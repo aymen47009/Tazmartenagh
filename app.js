@@ -51,6 +51,28 @@ function isLoanFullyReturned(loan){
   return returnedQty >= Number(loan.qty || 0);
 }
 
+function showReturnHistory(loan){
+  const returns = state.returns.filter(r => r.loanId === loan.id);
+  if(returns.length === 0) {
+    alert('لا توجد إرجاعات لهذه السلفية');
+    return;
+  }
+  
+  let message = `تاريخ إرجاعات السلفية:\n`;
+  message += `العتاد: ${loan.itemName}\n`;
+  message += `الكمية المسلّفة: ${loan.qty}\n`;
+  message += `المستلف: ${loan.person}\n\n`;
+  
+  returns.forEach((ret, index) => {
+    message += `${index + 1}. التاريخ: ${ret.date}\n`;
+    message += `   الكمية المرجعة: ${ret.qty}\n`;
+    message += `   التالفة: ${ret.damaged || 0}\n`;
+    message += `   الملاحظات: ${ret.notes || 'لا توجد'}\n\n`;
+  });
+  
+  alert(message);
+}
+
 // Session / Login
 function isLoggedIn(){
   try{ return JSON.parse(localStorage.getItem(STORAGE_KEYS.SESSION)||'{}').ok === true; }catch{ return false }
@@ -139,7 +161,8 @@ function renderLoans(filter=''){
     };
     el.querySelector('[data-act="return"]').onclick = ()=>{
       if(isFullyReturned) {
-        alert('هذه السلفية مُرجعة بالكامل');
+        // Show return history for fully returned loans
+        showReturnHistory(it);
         return;
       }
       // Navigate to returns tab
@@ -166,12 +189,16 @@ function renderReturns(filter=''){
     .sort((a,b)=> (b.date||'').localeCompare(a.date||''));
   list.innerHTML='';
   for(const it of items){
+    // Find the loan to get borrower name
+    const loan = it.loanId ? state.loans.find(l => l.id === it.loanId) : null;
+    const borrowerName = loan ? loan.person : 'غير محدد';
+    
     const el = document.createElement('div');
     el.className = 'item';
     el.innerHTML = `
       <div>
         <div>${it.itemName} • مرجعة: ${it.qty} • تالفة: ${it.damaged||0}</div>
-        <div class="meta">${it.notes||''}</div>
+        <div class="meta">المستلف: ${borrowerName} • ${it.notes||''}</div>
       </div>
       <div class="meta">${it.date||''}</div>
       <div class="actions">
@@ -183,6 +210,7 @@ function renderReturns(filter=''){
         state.returns = state.returns.filter(x=>x.id!==it.id);
         save(STORAGE_KEYS.RETURNS);
         renderReturns(q);
+        renderLoans(document.getElementById('loanSearch').value||''); // Refresh loans status
         renderInventory(document.getElementById('inventorySearch').value||'');
         renderReports();
       }
@@ -195,20 +223,26 @@ function renderReports(){
   const totalLoaned = state.loans.reduce((s,l)=> s + Number(l.qty||0), 0);
   document.getElementById('stat_total_loaned').textContent = totalLoaned;
   const today = todayStr();
-  const dueToday = state.loans.filter(l=> l.due && l.due <= today && !returnedEnough(l)).length;
+  // Only count loans that are due AND not fully returned
+  const dueToday = state.loans.filter(l=> l.due && l.due <= today && !isLoanFullyReturned(l)).length;
   document.getElementById('stat_due_today').textContent = dueToday;
   const dueList = document.getElementById('dueList');
   dueList.innerHTML='';
-  for(const l of state.loans.filter(l=> l.due && l.due <= today)){
+  // Show only loans that are due and not fully returned
+  for(const l of state.loans.filter(l=> l.due && l.due <= today && !isLoanFullyReturned(l))){
+    const returnedQty = getReturnedQtyForLoan(l.id);
+    const remainingQty = Number(l.qty) - returnedQty;
     const el = document.createElement('div');
     el.className='item';
-    el.innerHTML = `<div>${l.itemName} • ${l.qty} • ${l.person||''}</div><div class="meta">${l.due}</div><div></div>`;
+    el.innerHTML = `
+      <div>
+        <div>${l.itemName} • ${l.qty} • ${l.person||''}</div>
+        <div class="meta">مُرجع: ${returnedQty}, متبقي: ${remainingQty}</div>
+      </div>
+      <div class="meta">${l.due}</div>
+      <div></div>`;
     dueList.appendChild(el);
   }
-}
-function returnedEnough(loan){
-  // Optional enhancement: track returns per loan; currently we aggregate per item only
-  return false;
 }
 
 function fillDatalists(){
