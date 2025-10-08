@@ -4,6 +4,7 @@
 window.firebaseConfig = {
   apiKey: "AIzaSyCWmdF1yTeYZhFGcGp2JIc34etqyNe_f74",
   authDomain: "tazmartenagh.firebaseapp.com",
+  databaseURL: "https://tazmartenagh-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "tazmartenagh",
   storageBucket: "tazmartenagh.firebasestorage.app",
   messagingSenderId: "754336580475",

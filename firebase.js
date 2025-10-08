@@ -1,46 +1,54 @@
-// Firebase Firestore integration (optional). Uses modular CDN SDK.
+// Firebase Realtime Database integration (optional). Uses modular CDN SDK.
 // Requires a global window.firebaseConfig object defined in firebase-config.js
 
 if (window.firebaseConfig) {
   const appScript = 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-  const fsScript = 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+  const dbScript = 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
   (async () => {
-    const [{ initializeApp }, { getFirestore, collection, addDoc, setDoc, doc, deleteDoc, onSnapshot, query, orderBy } ] = await Promise.all([
+    const [{ initializeApp }, { getDatabase, ref, push, set, update, remove, onValue } ] = await Promise.all([
       import(appScript),
-      import(fsScript)
+      import(dbScript)
     ]);
 
     const app = initializeApp(window.firebaseConfig);
-    const db = getFirestore(app);
+    const db = getDatabase(app);
 
-    const colInventory = collection(db, 'inventory');
-    const colLoans = collection(db, 'loans');
-    const colReturns = collection(db, 'returns');
+    const pathInventory = 'inventory';
+    const pathLoans = 'loans';
+    const pathReturns = 'returns';
 
-    async function addInventory(item){ await addDoc(colInventory, item); }
-    async function updateInventory(id, data){ await setDoc(doc(colInventory, id), data, { merge: true }); }
-    async function deleteInventory(id){ await deleteDoc(doc(colInventory, id)); }
+    async function addInventory(item){ await push(ref(db, pathInventory), item); }
+    async function updateInventory(id, data){ await update(ref(db, `${pathInventory}/${id}`), data); }
+    async function deleteInventory(id){ await remove(ref(db, `${pathInventory}/${id}`)); }
 
-    async function addLoan(rec){ await addDoc(colLoans, rec); }
-    async function deleteLoan(id){ await deleteDoc(doc(colLoans, id)); }
+    async function addLoan(rec){ await push(ref(db, pathLoans), rec); }
+    async function deleteLoan(id){ await remove(ref(db, `${pathLoans}/${id}`)); }
 
-    async function addReturn(rec){ await addDoc(colReturns, rec); }
-    async function deleteReturn(id){ await deleteDoc(doc(colReturns, id)); }
+    async function addReturn(rec){ await push(ref(db, pathReturns), rec); }
+    async function deleteReturn(id){ await remove(ref(db, `${pathReturns}/${id}`)); }
+
+    function snapToArray(snap){
+      const val = snap.val() || {};
+      return Object.keys(val).map(id => ({ id, ...val[id] }));
+    }
 
     function subscribeInventory(cb){
-      return onSnapshot(query(colInventory, orderBy('name')), snap => {
-        cb(snap.docs.map(d=> ({ id: d.id, ...d.data() })));
+      return onValue(ref(db, pathInventory), (snap)=>{
+        const rows = snapToArray(snap).sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'ar'));
+        cb(rows);
       });
     }
     function subscribeLoans(cb){
-      return onSnapshot(query(colLoans, orderBy('date','desc')), snap => {
-        cb(snap.docs.map(d=> ({ id: d.id, ...d.data() })));
+      return onValue(ref(db, pathLoans), (snap)=>{
+        const rows = snapToArray(snap).sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+        cb(rows);
       });
     }
     function subscribeReturns(cb){
-      return onSnapshot(query(colReturns, orderBy('date','desc')), snap => {
-        cb(snap.docs.map(d=> ({ id: d.id, ...d.data() })));
+      return onValue(ref(db, pathReturns), (snap)=>{
+        const rows = snapToArray(snap).sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+        cb(rows);
       });
     }
 
