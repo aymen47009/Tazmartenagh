@@ -265,8 +265,10 @@ async function showItemQr(it){
   const payload = JSON.stringify({ t:'item', id: it.id, name: it.name });
   const el = document.getElementById('qrContainer');
   el.innerHTML='';
-  window.QRCode.toCanvas(payload, { width: 200, margin: 1 }, (err, c)=>{
-    if(!err && c) el.appendChild(c);
+  const canvas = document.createElement('canvas');
+  window.QRCode.toCanvas(canvas, payload, { width: 220, margin: 1 }, (err)=>{
+    if(err){ el.textContent = 'فشل توليد رمز QR'; return; }
+    el.appendChild(canvas);
   });
 }
 
