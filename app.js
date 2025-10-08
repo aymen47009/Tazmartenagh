@@ -241,13 +241,32 @@ function deleteEditingItem(){
 }
 
 // QR generation / scanning for items
-function showItemQr(it){
+function loadScriptOnce(src){
+  return new Promise((resolve, reject)=>{
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if(existing){ existing.addEventListener('load', ()=> resolve()); if(existing.readyState==='complete') resolve(); return; }
+    const s = document.createElement('script'); s.src = src; s.async = true;
+    s.onload = ()=> resolve(); s.onerror = ()=> reject(new Error('load failed'));
+    document.head.appendChild(s);
+  });
+}
+async function ensureQRCode(){
+  if(window.QRCode) return;
+  try{
+    await loadScriptOnce('https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js');
+  }catch{
+    await loadScriptOnce('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js');
+  }
+}
+async function showItemQr(it){
   openItemDialog(it.id);
+  await ensureQRCode();
+  if(!window.QRCode){ alert('تعذر تحميل مكتبة QR'); return; }
   const payload = JSON.stringify({ t:'item', id: it.id, name: it.name });
   const el = document.getElementById('qrContainer');
   el.innerHTML='';
   window.QRCode.toCanvas(payload, { width: 200, margin: 1 }, (err, c)=>{
-    if(!err) el.appendChild(c);
+    if(!err && c) el.appendChild(c);
   });
 }
 
