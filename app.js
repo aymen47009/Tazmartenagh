@@ -40,6 +40,17 @@ function getAvailableFor(name){
   return total - loaned + returned;
 }
 
+function getReturnedQtyForLoan(loanId){
+  return state.returns
+    .filter(r => r.loanId === loanId)
+    .reduce((sum, r) => sum + Number(r.qty || 0), 0);
+}
+
+function isLoanFullyReturned(loan){
+  const returnedQty = getReturnedQtyForLoan(loan.id);
+  return returnedQty >= Number(loan.qty || 0);
+}
+
 // Session / Login
 function isLoggedIn(){
   try{ return JSON.parse(localStorage.getItem(STORAGE_KEYS.SESSION)||'{}').ok === true; }catch{ return false }
@@ -100,16 +111,20 @@ function renderLoans(filter=''){
     .sort((a,b)=> (b.date||'').localeCompare(a.date||''));
   list.innerHTML='';
   for(const it of items){
+    const returnedQty = getReturnedQtyForLoan(it.id);
+    const isFullyReturned = isLoanFullyReturned(it);
+    const remainingQty = Number(it.qty) - returnedQty;
+    
     const el = document.createElement('div');
     el.className = 'item';
     el.innerHTML = `
       <div>
-        <div>${it.itemName} • ${it.qty}</div>
+        <div>${it.itemName} • ${it.qty} ${isFullyReturned ? '(مُرجع بالكامل)' : `(مُرجع: ${returnedQty}, متبقي: ${remainingQty})`}</div>
         <div class="meta">${it.person||''} • ${it.dept||''} • ${it.phone||''}</div>
       </div>
       <div class="meta">${it.date||''}</div>
       <div class="actions">
-        <button class="btn" data-act="return">إرجاع</button>
+        <button class="btn ${isFullyReturned ? 'secondary' : ''}" data-act="return" ${isFullyReturned ? 'disabled' : ''}>${isFullyReturned ? 'مُرجع' : 'إرجاع'}</button>
         <button class="btn danger" data-act="del">حذف</button>
       </div>`;
     el.querySelector('[data-act="del"]').onclick = ()=>{
@@ -123,11 +138,17 @@ function renderLoans(filter=''){
       }
     };
     el.querySelector('[data-act="return"]').onclick = ()=>{
+      if(isFullyReturned) {
+        alert('هذه السلفية مُرجعة بالكامل');
+        return;
+      }
       // Navigate to returns tab
       goto('returns');
       // Pre-fill the return form
       document.getElementById('ret_item').value = it.itemName;
-      document.getElementById('ret_qty').value = it.qty;
+      document.getElementById('ret_qty').value = remainingQty; // Set remaining quantity
+      // Store loan ID for linking
+      document.getElementById('ret_loanId').value = it.id;
       // Focus on notes field for additional info
       setTimeout(() => {
         document.getElementById('ret_notes').focus();
@@ -422,7 +443,8 @@ function init(){
       phone: document.getElementById('loan_phone').value.trim(),
       dept: document.getElementById('loan_dept').value.trim(),
       date: document.getElementById('loan_date').value,
-      due: document.getElementById('loan_due').value
+      due: document.getElementById('loan_due').value,
+      returnedQty: 0 // Track returned quantity
     };
     if(!rec.itemName || rec.qty<=0) return;
     // Prevent negative available
@@ -449,19 +471,36 @@ function init(){
   document.getElementById('ret_date').value = todayStr();
   document.getElementById('returnForm').addEventListener('submit', (e)=>{
     e.preventDefault();
+    const loanId = document.getElementById('ret_loanId').value;
     const rec = {
       id: uid(),
       date: document.getElementById('ret_date').value,
       itemName: document.getElementById('ret_item').value.trim(),
       qty: Number(document.getElementById('ret_qty').value||0),
       damaged: Number(document.getElementById('ret_damaged').value||0),
-      notes: document.getElementById('ret_notes').value.trim()
+      notes: document.getElementById('ret_notes').value.trim(),
+      loanId: loanId || null // Link to loan if available
     };
     if(!rec.itemName) return;
+    
+    // If linked to a loan, validate quantity
+    if(loanId) {
+      const loan = state.loans.find(l => l.id === loanId);
+      if(loan) {
+        const alreadyReturned = getReturnedQtyForLoan(loanId);
+        const maxReturnable = Number(loan.qty) - alreadyReturned;
+        if(rec.qty > maxReturnable) {
+          alert(`لا يمكن إرجاع أكثر من ${maxReturnable} (المتبقي من السلفية)`);
+          return;
+        }
+      }
+    }
+    
     if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addReturn(doc); }
     else {
       state.returns.push(rec); save(STORAGE_KEYS.RETURNS);
       renderReturns(document.getElementById('returnSearch').value||'');
+      renderLoans(document.getElementById('loanSearch').value||''); // Refresh loans to show updated status
       renderInventory(document.getElementById('inventorySearch').value||'');
       renderReports();
     }
