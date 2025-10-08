@@ -263,17 +263,41 @@ async function showItemQr(it){
   await ensureQRCode();
   const status = document.getElementById('qrStatus');
   status.textContent = '';
-  if(!window.QRCode){ status.textContent = 'تعذر تحميل مكتبة QR'; return; }
+  
+  console.log('QRCode available:', !!window.QRCode);
+  if(!window.QRCode){ 
+    status.textContent = 'تعذر تحميل مكتبة QR'; 
+    console.error('QRCode library not loaded');
+    return; 
+  }
+  
   const payload = JSON.stringify({ t:'item', id: it.id, name: it.name });
+  console.log('QR payload:', payload);
+  
   const el = document.getElementById('qrContainer');
   el.innerHTML='';
-  const canvas = document.createElement('canvas');
   status.textContent = 'جاري توليد الرمز...';
-  window.QRCode.toCanvas(canvas, payload, { width: 220, margin: 1 }, (err)=>{
-    if(err){ status.textContent = 'فشل توليد رمز QR'; return; }
-    el.appendChild(canvas);
+  
+  // Try simple text first
+  try {
+    const qrString = await window.QRCode.toString(payload, { type: 'svg' });
+    console.log('QR generated as SVG');
+    el.innerHTML = qrString;
     status.textContent = 'تم توليد الرمز';
-  });
+  } catch (err) {
+    console.error('SVG generation failed:', err);
+    // Fallback to canvas
+    try {
+      const canvas = document.createElement('canvas');
+      await window.QRCode.toCanvas(canvas, payload, { width: 220, margin: 1 });
+      console.log('QR generated as canvas');
+      el.appendChild(canvas);
+      status.textContent = 'تم توليد الرمز';
+    } catch (canvasErr) {
+      console.error('Canvas generation failed:', canvasErr);
+      status.textContent = 'فشل توليد رمز QR: ' + canvasErr.message;
+    }
+  }
 }
 
 let scanRAF=null, scanStream=null;
