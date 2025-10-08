@@ -109,6 +109,7 @@ function renderLoans(filter=''){
       </div>
       <div class="meta">${it.date||''}</div>
       <div class="actions">
+        <button class="btn" data-act="return">إرجاع</button>
         <button class="btn danger" data-act="del">حذف</button>
       </div>`;
     el.querySelector('[data-act="del"]').onclick = ()=>{
@@ -120,6 +121,17 @@ function renderLoans(filter=''){
         renderInventory(document.getElementById('inventorySearch').value||'');
         renderReports();
       }
+    };
+    el.querySelector('[data-act="return"]').onclick = ()=>{
+      // Navigate to returns tab
+      goto('returns');
+      // Pre-fill the return form
+      document.getElementById('ret_item').value = it.itemName;
+      document.getElementById('ret_qty').value = it.qty;
+      // Focus on notes field for additional info
+      setTimeout(() => {
+        document.getElementById('ret_notes').focus();
+      }, 100);
     };
     list.appendChild(el);
   }
