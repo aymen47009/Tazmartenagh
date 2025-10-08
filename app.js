@@ -111,7 +111,16 @@ function renderLoans(filter=''){
       <div class="actions">
         <button class="btn danger" data-act="del">حذف</button>
       </div>`;
-    el.querySelector('[data-act="del"]').onclick = ()=>{ state.loans = state.loans.filter(x=>x.id!==it.id); save(STORAGE_KEYS.LOANS); renderLoans(q); renderInventory(document.getElementById('inventorySearch').value||''); renderReports(); };
+    el.querySelector('[data-act="del"]').onclick = ()=>{
+      if(useCloud && window.cloud){ window.cloud.deleteLoan(it.id); }
+      else {
+        state.loans = state.loans.filter(x=>x.id!==it.id);
+        save(STORAGE_KEYS.LOANS);
+        renderLoans(q);
+        renderInventory(document.getElementById('inventorySearch').value||'');
+        renderReports();
+      }
+    };
     list.appendChild(el);
   }
 }
@@ -135,7 +144,16 @@ function renderReturns(filter=''){
       <div class="actions">
         <button class="btn danger" data-act="del">حذف</button>
       </div>`;
-    el.querySelector('[data-act="del"]').onclick = ()=>{ state.returns = state.returns.filter(x=>x.id!==it.id); save(STORAGE_KEYS.RETURNS); renderReturns(q); renderInventory(document.getElementById('inventorySearch').value||''); renderReports(); };
+    el.querySelector('[data-act="del"]').onclick = ()=>{
+      if(useCloud && window.cloud){ window.cloud.deleteReturn(it.id); }
+      else {
+        state.returns = state.returns.filter(x=>x.id!==it.id);
+        save(STORAGE_KEYS.RETURNS);
+        renderReturns(q);
+        renderInventory(document.getElementById('inventorySearch').value||'');
+        renderReports();
+      }
+    };
     list.appendChild(el);
   }
 }
