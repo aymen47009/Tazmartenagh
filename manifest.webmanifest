@@ -1,0 +1,17 @@
+{
+  "name": "تسيير مخزون العتاد",
+  "short_name": "المخزون",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": ".",
+  "display": "standalone",
+  "scope": "/",
+  "theme_color": "#0d9488",
+  "background_color": "#0b1416",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
+
+

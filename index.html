@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0d9488" />
+    <title>تسيير مخزون العتاد - PWA</title>
+    <base href="./">
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" href="icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <span class="logo">🏥</span>
+        <span>تسيير مخزون العتاد</span>
+      </div>
+      <nav class="top-actions">
+        <button id="installBtn" class="btn secondary" hidden>تثبيت التطبيق</button>
+        <button id="logoutBtn" class="btn danger" hidden>تسجيل الخروج</button>
+      </nav>
+    </header>
+
+    <main id="app" class="container">
+      <!-- Login View -->
+      <section id="view-login" class="view">
+        <h1>مرحبًا بك</h1>
+        <p class="muted">دخول موحد لجميع الأعضاء</p>
+        <form id="loginForm" class="card">
+          <label class="field">
+            <span>رمز الدخول</span>
+            <input id="loginCode" type="password" inputmode="numeric" autocomplete="one-time-code" placeholder="••••" required />
+          </label>
+          <button class="btn primary" type="submit">دخول</button>
+        </form>
+      </section>
+
+      <!-- Shell (visible after login) -->
+      <section id="view-shell" class="view hidden">
+        <div class="tabs">
+          <button data-route="inventory" class="tab active">المخزون</button>
+          <button data-route="loans" class="tab">السلفيات</button>
+          <button data-route="returns" class="tab">الإرجاعات</button>
+          <button data-route="reports" class="tab">التقارير</button>
+        </div>
+
+        <div id="route-inventory" class="route">
+          <div class="toolbar">
+            <button id="addItemBtn" class="btn primary">إضافة عتاد</button>
+            <div class="spacer"></div>
+            <input id="inventorySearch" class="input" placeholder="بحث باسم العتاد" />
+          </div>
+          <div class="list" id="inventoryList"></div>
+
+          <!-- Add/Edit Item Modal -->
+          <dialog id="itemDialog" class="dialog">
+            <form method="dialog" id="itemForm">
+              <h3 id="itemDialogTitle">إضافة عتاد</h3>
+              <div class="grid-2">
+                <label class="field">
+                  <span>اسم العتاد</span>
+                  <input id="f_name" required />
+                </label>
+                <label class="field">
+                  <span>الكمية الأصلية</span>
+                  <input id="f_initialQty" type="number" min="0" step="1" required />
+                </label>
+                <label class="field">
+                  <span>الكمية الكلية</span>
+                  <input id="f_totalQty" type="number" min="0" step="1" required />
+                </label>
+                <label class="field">
+                  <span>الملاحظات</span>
+                  <input id="f_notes" />
+                </label>
+              </div>
+
+              <div class="qr-row">
+                <button id="genQrBtn" class="btn">توليد QR</button>
+                <button id="scanQrBtn" class="btn">مسح QR</button>
+              </div>
+              <div id="qrContainer" class="qr"></div>
+              <div id="scanContainer" class="scan hidden">
+                <video id="scanVideo" playsinline></video>
+                <button id="stopScanBtn" class="btn danger small" type="button">إيقاف المسح</button>
+              </div>
+
+              <menu class="dialog-actions">
+                <button id="deleteItemBtn" class="btn danger" value="delete" type="button">حذف</button>
+                <div class="spacer"></div>
+                <button class="btn" value="cancel">إلغاء</button>
+                <button class="btn primary" value="ok">حفظ</button>
+              </menu>
+            </form>
+          </dialog>
+        </div>
+
+        <div id="route-loans" class="route hidden">
+          <form id="loanForm" class="card">
+            <h3>إضافة سلف</h3>
+            <div class="grid-2">
+              <label class="field">
+                <span>اسم العتاد</span>
+                <input id="loan_item" list="itemsDatalist" required />
+                <datalist id="itemsDatalist"></datalist>
+              </label>
+              <label class="field">
+                <span>الكمية المسلَّفة</span>
+                <input id="loan_qty" type="number" min="1" step="1" required />
+              </label>
+              <label class="field">
+                <span>اسم المستلف</span>
+                <input id="loan_person" required />
+              </label>
+              <label class="field">
+                <span>رقم هاتف المستلف</span>
+                <input id="loan_phone" inputmode="tel" />
+              </label>
+              <label class="field">
+                <span>القسم / الجهة</span>
+                <input id="loan_dept" />
+              </label>
+              <label class="field">
+                <span>تاريخ السلف</span>
+                <input id="loan_date" type="date" required />
+              </label>
+              <label class="field">
+                <span>تاريخ الإرجاع المتوقع</span>
+                <input id="loan_due" type="date" />
+              </label>
+            </div>
+            <div class="row">
+              <button class="btn primary" type="submit">حفظ</button>
+              <button class="btn" type="button" id="scanLoanQrBtn">مسح QR</button>
+            </div>
+          </form>
+          <div class="toolbar">
+            <input id="loanSearch" class="input" placeholder="بحث في السلفيات" />
+          </div>
+          <div class="list" id="loansList"></div>
+          <div id="loanScanArea" class="scan hidden">
+            <video id="loanScanVideo" playsinline></video>
+            <button id="stopLoanScanBtn" class="btn danger small" type="button">إيقاف المسح</button>
+          </div>
+        </div>
+
+        <div id="route-returns" class="route hidden">
+          <form id="returnForm" class="card">
+            <h3>تسجيل إرجاع</h3>
+            <div class="grid-2">
+              <label class="field">
+                <span>التاريخ</span>
+                <input id="ret_date" type="date" required />
+              </label>
+              <label class="field">
+                <span>اسم العتاد</span>
+                <input id="ret_item" list="itemsDatalist2" required />
+                <datalist id="itemsDatalist2"></datalist>
+              </label>
+              <label class="field">
+                <span>الكمية المرجعة</span>
+                <input id="ret_qty" type="number" min="0" step="1" required />
+              </label>
+              <label class="field">
+                <span>الكمية التالفة</span>
+                <input id="ret_damaged" type="number" min="0" step="1" value="0" />
+              </label>
+              <label class="field">
+                <span>الملاحظات</span>
+                <input id="ret_notes" />
+              </label>
+            </div>
+            <button class="btn primary" type="submit">حفظ</button>
+          </form>
+          <div class="toolbar">
+            <input id="returnSearch" class="input" placeholder="بحث في الإرجاعات" />
+          </div>
+          <div class="list" id="returnsList"></div>
+        </div>
+
+        <div id="route-reports" class="route hidden">
+          <div class="cards">
+            <div class="stat">
+              <div class="stat-title">مجموع العتاد المسلَّف</div>
+              <div id="stat_total_loaned" class="stat-value">0</div>
+            </div>
+            <div class="stat">
+              <div class="stat-title">يجب استرداده اليوم</div>
+              <div id="stat_due_today" class="stat-value">0</div>
+            </div>
+          </div>
+          <h3>تنبيهات الإرجاع</h3>
+          <div class="list" id="dueList"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <small class="muted">نسخة أولية • يعمل دون اتصال</small>
+    </footer>
+
+    <!-- QR libraries (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" integrity="sha256-7l1mkuXf2uC8O19Z5i7R2pP8pBf3ed5cI6R8m3uQtnA=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" integrity="sha256-+b9c8jTz0Hj2Qq3U1o8n2QOQ6m3lSyG+9r8Yt7o5qY8=" crossorigin="anonymous"></script>
+
+    <!-- Firebase config (user-provided) and integration (optional) -->
+    <script src="firebase-config.js" defer></script>
+    <script type="module" src="firebase.js"></script>
+    <script src="app.js"></script>
+  </body>
+  <script>
+    // Register Service Worker as early as possible
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      });
+    }
+  </script>
+  
+</html>
+
+
