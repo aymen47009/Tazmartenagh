@@ -22,6 +22,24 @@ let useCloud = false; // toggled when Firebase is ready
 const uid = () => Math.random().toString(36).slice(2, 10);
 const todayStr = () => new Date().toISOString().slice(0,10);
 
+// Theme helpers
+const mediaDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : { matches: true, addEventListener: ()=>{} };
+function setDataTheme(mode){
+  const theme = mode === 'light' ? 'light' : mode === 'dark' ? 'dark' : (mediaDark.matches ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+}
+function applySavedTheme(){
+  const saved = localStorage.getItem('theme') || 'auto';
+  setDataTheme(saved);
+}
+function setTheme(mode){
+  localStorage.setItem('theme', mode);
+  setDataTheme(mode);
+}
+if (mediaDark && typeof mediaDark.addEventListener === 'function'){
+  mediaDark.addEventListener('change', ()=>{ if((localStorage.getItem('theme')||'auto')==='auto'){ setDataTheme('auto'); } });
+}
+
 function loadAll(){
   state.inventory = JSON.parse(localStorage.getItem(STORAGE_KEYS.INVENTORY) || '[]');
   state.loans = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOANS) || '[]');
@@ -265,6 +283,12 @@ function renderReports(){
       <div></div>`;
     dueList.appendChild(el);
   }
+  // In-use and damaged stats
+  const totalReturned = state.returns.reduce((s,r)=> s + Number(r.qty||0), 0);
+  const inUseEl = document.getElementById('stat_in_use');
+  if(inUseEl) inUseEl.textContent = Math.max(totalLoaned - totalReturned, 0);
+  const damagedEl = document.getElementById('stat_damaged');
+  if(damagedEl) damagedEl.textContent = state.returns.reduce((s,r)=> s + Number(r.damaged||0), 0);
 }
 
 function fillDatalists(){
@@ -407,6 +431,13 @@ function stopScan(){
 // Event wiring
 function init(){
   loadAll();
+  // Theme select wiring
+  applySavedTheme();
+  const themeSelect = document.getElementById('themeSelect');
+  if(themeSelect){
+    themeSelect.value = localStorage.getItem('theme') || 'auto';
+    themeSelect.onchange = ()=> setTheme(themeSelect.value);
+  }
   const logged = isLoggedIn();
   document.getElementById('view-login').classList.toggle('hidden', logged);
   document.getElementById('view-shell').classList.toggle('hidden', !logged);

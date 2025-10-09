@@ -20,6 +20,11 @@
         <span>تسيير مخزون العتاد</span>
       </div>
       <nav class="top-actions">
+        <select id="themeSelect" class="input" style="max-width:140px">
+          <option value="auto">وضع تلقائي</option>
+          <option value="light">وضع نهاري</option>
+          <option value="dark">وضع ليلي</option>
+        </select>
         <button id="installBtn" class="btn secondary" hidden>تثبيت التطبيق</button>
         <button id="logoutBtn" class="btn danger" hidden>تسجيل الخروج</button>
       </nav>
@@ -193,6 +198,14 @@
             <div class="stat">
               <div class="stat-title">يجب استرداده اليوم</div>
               <div id="stat_due_today" class="stat-value">0</div>
+            </div>
+            <div class="stat">
+              <div class="stat-title">قيد الاستخدام الآن</div>
+              <div id="stat_in_use" class="stat-value">0</div>
+            </div>
+            <div class="stat">
+              <div class="stat-title">تالف/بحاجة صيانة</div>
+              <div id="stat_damaged" class="stat-value">0</div>
             </div>
           </div>
           <h3>تنبيهات الإرجاع</h3>
