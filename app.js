@@ -444,6 +444,47 @@ function stopScan(){
   scanRAF=null; scanStream=null;
 }
 
+
+// ✅ ربط تطبيقك بمزامنة Google Sheets إذا كانت مفعلة
+if (window.gsheetHooks) {
+  cloud.addInventory = async (item) => {
+    await push(ref(db, 'inventory'), item);
+    window.gsheetHooks.inventory.onAdd(item);
+  };
+
+  cloud.updateInventory = async (id, changes) => {
+    await update(ref(db, `inventory/${id}`), changes);
+    window.gsheetHooks.inventory.onUpdate(id, changes);
+  };
+
+  cloud.deleteInventory = async (id) => {
+    await remove(ref(db, `inventory/${id}`));
+    window.gsheetHooks.inventory.onDelete(id);
+  };
+
+  cloud.addLoan = async (rec) => {
+    await push(ref(db, 'loans'), rec);
+    window.gsheetHooks.loans.onAdd(rec);
+  };
+
+  cloud.deleteLoan = async (id) => {
+    await remove(ref(db, `loans/${id}`));
+    window.gsheetHooks.loans.onDelete(id);
+  };
+
+  cloud.addReturn = async (rec) => {
+    await push(ref(db, 'returns'), rec);
+    window.gsheetHooks.returns.onAdd(rec);
+  };
+
+  cloud.deleteReturn = async (id) => {
+    await remove(ref(db, `returns/${id}`));
+    window.gsheetHooks.returns.onDelete(id);
+  };
+}
+
+
+
 // Event wiring
 function init(){
   loadAll();
