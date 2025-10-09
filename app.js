@@ -169,7 +169,7 @@ function renderLoans(filter=''){
         <button class="btn danger" data-act="del">حذف</button>
       </div>`;
     el.querySelector('[data-act="del"]').onclick = ()=>{
-      if(useCloud && window.cloud){ window.cloud.deleteLoan(it.id); }
+      if(useCloud && window.cloud){ window.cloud.deleteLoan(it.id); if(window.gsheetHooks) window.gsheetHooks.loans.onDelete(it.id); }
       else {
         state.loans = state.loans.filter(x=>x.id!==it.id);
         save(STORAGE_KEYS.LOANS);
@@ -245,7 +245,7 @@ function renderReturns(filter=''){
         <button class="btn danger" data-act="del">حذف</button>
       </div>`;
     el.querySelector('[data-act="del"]').onclick = ()=>{
-      if(useCloud && window.cloud){ window.cloud.deleteReturn(it.id); }
+      if(useCloud && window.cloud){ window.cloud.deleteReturn(it.id); if(window.gsheetHooks) window.gsheetHooks.returns.onDelete(it.id); }
       else {
         state.returns = state.returns.filter(x=>x.id!==it.id);
         save(STORAGE_KEYS.RETURNS);
@@ -272,12 +272,19 @@ function renderReports(){
   for(const l of state.loans.filter(l=> l.due && l.due <= today && !isLoanFullyReturned(l))){
     const returnedQty = getReturnedQtyForLoan(l.id);
     const remainingQty = Number(l.qty) - returnedQty;
+    let daysLateStr = '';
+    try {
+      const dueDate = new Date(l.due + 'T00:00:00');
+      const now = new Date(today + 'T00:00:00');
+      const daysLate = Math.max(0, Math.round((now - dueDate) / (1000*60*60*24)));
+      daysLateStr = daysLate > 0 ? ` • متأخر ${daysLate} يوم` : '';
+    } catch {}
     const el = document.createElement('div');
     el.className='item';
     el.innerHTML = `
       <div>
         <div>${l.itemName} • ${l.qty} • ${l.person||''}</div>
-        <div class="meta">مُرجع: ${returnedQty}, متبقي: ${remainingQty}</div>
+        <div class="meta">مُرجع: ${returnedQty}, متبقي: ${remainingQty}${daysLateStr}</div>
       </div>
       <div class="meta">${l.due}</div>
       <div></div>`;
@@ -326,14 +333,20 @@ function submitItemDialog(ok){
   if(!name) return;
   const payload = { name, initialQty, totalQty, notes };
   if(useCloud && window.cloud){
-    if(editingItemId){ window.cloud.updateInventory(editingItemId, payload); }
-    else { window.cloud.addInventory(payload); }
+    if(editingItemId){
+      window.cloud.updateInventory(editingItemId, payload);
+      if(window.gsheetHooks) window.gsheetHooks.inventory.onUpdate(editingItemId, payload);
+    } else {
+      window.cloud.addInventory(payload);
+      if(window.gsheetHooks) window.gsheetHooks.inventory.onAdd(payload);
+    }
   } else {
     if(editingItemId){
       const it = state.inventory.find(i=>i.id===editingItemId);
       if(!it) return; Object.assign(it, payload);
     } else {
       state.inventory.push({ id: uid(), ...payload });
+      if(window.gsheetHooks) window.gsheetHooks.inventory.onAdd(payload);
     }
     save(STORAGE_KEYS.INVENTORY);
     renderInventory(document.getElementById('inventorySearch').value||'');
@@ -344,7 +357,10 @@ function submitItemDialog(ok){
 
 function deleteEditingItem(){
   if(!editingItemId) return;
-  if(useCloud && window.cloud){ window.cloud.deleteInventory(editingItemId); }
+  if(useCloud && window.cloud){
+    window.cloud.deleteInventory(editingItemId);
+    if(window.gsheetHooks) window.gsheetHooks.inventory.onDelete(editingItemId);
+  }
   else {
     state.inventory = state.inventory.filter(i=>i.id!==editingItemId);
     save(STORAGE_KEYS.INVENTORY);
@@ -536,7 +552,7 @@ function init(){
     if(!rec.itemName || rec.qty<=0) return;
     // Prevent negative available
     if(getAvailableFor(rec.itemName) - rec.qty < 0){ alert('الكمية غير متاحة'); return; }
-    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addLoan(doc); }
+    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addLoan(doc); if(window.gsheetHooks) window.gsheetHooks.loans.onAdd(doc); }
     else {
       state.loans.push(rec); save(STORAGE_KEYS.LOANS);
       renderLoans(document.getElementById('loanSearch').value||'');
@@ -583,7 +599,7 @@ function init(){
       }
     }
     
-    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addReturn(doc); }
+    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addReturn(doc); if(window.gsheetHooks) window.gsheetHooks.returns.onAdd(doc); }
     else {
       state.returns.push(rec); save(STORAGE_KEYS.RETURNS);
       renderReturns(document.getElementById('returnSearch').value||'');
