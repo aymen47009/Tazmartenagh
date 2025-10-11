@@ -329,6 +329,11 @@ function openItemDialog(id){
 
 // استبدل الدالة القديمة بهذه:
 function submitItemDialog(ok){
+    console.log('🔴 submitItemDialog استُدعيت مع ok=' + ok);
+  console.log('window.gsheetHooks موجودة؟', !!window.gsheetHooks);
+  
+  if(!ok){ itemDialog.close(); return; }
+
   if(!ok){ itemDialog.close(); return; }
   const name = document.getElementById('f_name').value.trim();
   const initialQty = Number(document.getElementById('f_initialQty').value||0);
