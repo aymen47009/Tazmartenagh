@@ -327,6 +327,7 @@ function openItemDialog(id){
   if(typeof itemDialog.showModal === 'function') itemDialog.showModal();
 }
 
+// استبدل الدالة القديمة بهذه:
 function submitItemDialog(ok){
   if(!ok){ itemDialog.close(); return; }
   const name = document.getElementById('f_name').value.trim();
@@ -334,7 +335,9 @@ function submitItemDialog(ok){
   const totalQty = Number(document.getElementById('f_totalQty').value||0);
   const notes = document.getElementById('f_notes').value.trim();
   if(!name) return;
+  
   const payload = { name, initialQty, totalQty, notes };
+  
   if(useCloud && window.cloud){
     if(editingItemId){
       window.cloud.updateInventory(editingItemId, payload);
@@ -346,10 +349,18 @@ function submitItemDialog(ok){
   } else {
     if(editingItemId){
       const it = state.inventory.find(i=>i.id===editingItemId);
-      if(!it) return; Object.assign(it, payload);
+      if(!it) return; 
+      Object.assign(it, payload);
+      // تحديث في Google Sheets
+      if(window.gsheetHooks) window.gsheetHooks.inventory.onUpdate(editingItemId, payload);
     } else {
-      state.inventory.push({ id: uid(), ...payload });
-      if(window.gsheetHooks) window.gsheetHooks.inventory.onAdd(payload);
+      const newItem = { id: uid(), ...payload };
+      state.inventory.push(newItem);
+      // إرسال إلى Google Sheets مع جميع البيانات
+      if(window.gsheetHooks) {
+        console.log('📤 إرسال عتاد جديد:', newItem);
+        window.gsheetHooks.inventory.onAdd(newItem);
+      }
     }
     save(STORAGE_KEYS.INVENTORY);
     renderInventory(document.getElementById('inventorySearch').value||'');
