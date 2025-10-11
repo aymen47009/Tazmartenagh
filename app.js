@@ -460,11 +460,7 @@ function stopScan(){
 
 
 // ✅ ربط تطبيقك بمزامنة Google Sheets إذا كانت مفعلة
-if (window.gsheetHooks) {
-  cloud.addInventory = async (item) => {
-    await push(ref(db, 'inventory'), item);
-    window.gsheetHooks.inventory.onAdd(item);
-  };
+
 
   cloud.updateInventory = async (id, changes) => {
     await update(ref(db, `inventory/${id}`), changes);
