@@ -538,11 +538,7 @@ function init(){
     const status = document.getElementById('qrStatus');
     status.textContent = '';
 
-    document.getElementById('itemForm').addEventListener('submit', (e)=>{ 
-  e.preventDefault(); 
-  console.log('✅ itemForm submitted');
-  submitItemDialog(true); 
-});
+    
     // Validate fields
     const name = document.getElementById('f_name').value.trim();
     if(!name){ 
