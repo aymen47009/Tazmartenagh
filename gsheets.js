@@ -1,6 +1,6 @@
 // Google Sheets Sync - Simple Direct Method
 // ضع رابط Web App هنا (الرابط من Google Apps Script deployment)
-const SHEETS_URL = "https://script.google.com/macros/s/AKfycbwyBThNYuC98RDvHg-qFzD9aAWHni9QECpDvfs8oygTGTBsX_HswWDCV8xDR3XJY10ESw/exec";
+const SHEETS_URL = "https://script.google.com/macros/s/AKfycbxZjnueoERTnwDU49tsIoG47o2elYrlt_uPGbZHUuLvMWYjz_k44NZU9zPp-5Xr5ooUBw/exec";
 
 async function postToSheet(payload) {
   if (!SHEETS_URL) {
@@ -91,4 +91,5 @@ window.gsheetHooks = {
 };
 
 console.log('✅ Google Sheets Sync Initialized');
+
 
