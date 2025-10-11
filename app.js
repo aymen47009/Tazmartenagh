@@ -8,7 +8,7 @@ const STORAGE_KEYS = {
   SESSION: 'session'
 };
 
-const DEFAULT_LOGIN_CODE = '1234'; // shared simple code
+const DEFAULT_LOGIN_CODE = ''; // shared simple code
 
 // State
 let state = {
