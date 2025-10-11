@@ -1,5 +1,5 @@
 // Google Sheets Sync - نظام متزامن ثنائي الاتجاه
-const SHEETS_URL = "https://script.google.com/macros/s/AKfycbz0VDk0Rtt7obyeYTb5ANvbjdI_9za1k04ORkE1IfcFaExaDCF33MYUa4O9bKvJgXQ5ow/exec";
+const SHEETS_URL = "https://script.google.com/macros/s/AKfycbzRhQkV2oCUmDEJy4eacWqv867IgKQx3fCwrnUdZrz9hMRaLcdrNXoBOA4SF9gNXumTvg/exec";
 
 async function postToSheet(payload) {
   if (!SHEETS_URL) {
@@ -127,3 +127,4 @@ async function syncFromSheets() {
 }
 
 console.log('✅ Google Sheets Sync Initialized');
+
