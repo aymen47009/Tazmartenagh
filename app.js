@@ -45,6 +45,9 @@ function loadAll(){
   state.loans = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOANS) || '[]');
   state.returns = JSON.parse(localStorage.getItem(STORAGE_KEYS.RETURNS) || '[]');
 }
+
+syncFromSheets(); // جلب البيانات من Google Sheets عند بدء التطبيق
+
 function save(key){
   if(key === STORAGE_KEYS.INVENTORY) localStorage.setItem(key, JSON.stringify(state.inventory));
   if(key === STORAGE_KEYS.LOANS) localStorage.setItem(key, JSON.stringify(state.loans));
