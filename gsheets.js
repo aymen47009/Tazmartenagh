@@ -1,5 +1,6 @@
-// Google Sheets Sync - نظام متزامن ثنائي الاتجاه
-const SHEETS_URL = "https://script.google.com/macros/s/AKfycbz0VDk0Rtt7obyeYTb5ANvbjdI_9za1k04ORkE1IfcFaExaDCF33MYUa4O9bKvJgXQ5ow/exec";
+// Google Sheets Sync - Simple Direct Method
+// ضع رابط Web App هنا (الرابط من Google Apps Script deployment)
+const SHEETS_URL = "https://script.google.com/macros/s/AKfycbxZjnueoERTnwDU49tsIoG47o2elYrlt_uPGbZHUuLvMWYjz_k44NZU9zPp-5Xr5ooUBw/exec";
 
 async function postToSheet(payload) {
   if (!SHEETS_URL) {
@@ -8,85 +9,86 @@ async function postToSheet(payload) {
   }
   
   try {
-    console.log('📤 إرسال البيانات:', payload.type, payload);
+    console.log('📤 إرسال البيانات:', payload);
     
     const response = await fetch(SHEETS_URL, {
       method: 'POST',
       body: JSON.stringify(payload)
     });
     
-    const result = await response.json();
-    console.log('✅ الرد من الخادم:', result);
-    
-    if (result.status === 'success') {
-      console.log('✅ تم الحفظ بنجاح في Google Sheets:', result.message);
-    } else {
-      console.warn('⚠️ خطأ من الخادم:', result.message);
+    if (!response.ok) {
+      console.warn(`⚠️ Server responded with status: ${response.status}`);
+      return;
     }
     
+    const result = await response.json();
+    console.log('✅ تم الحفظ في Google Sheets:', result);
+    
   } catch (error) {
-    console.error('❌ خطأ في الاتصال:', error);
+    // لا تطبع رسالة خطأ مزعجة - فقط سجل في console
+    console.warn('⚠️ Google Sheets sync (optional):', error.message);
   }
 }
 
 // Hooks للتطبيق
 window.gsheetHooks = {
   inventory: {
-    onAdd: function(row) {
-      console.log('🔵 inventory.onAdd استُدعيت مع:', row);
+    onAdd: (row) => {
       postToSheet({ 
         type: 'inventory_add',
-        data: row
+        timestamp: new Date().toLocaleString('ar-SA'),
+        data: row 
       });
     },
-    onUpdate: function(id, changes) {
-      console.log('🔵 inventory.onUpdate استُدعيت مع:', id, changes);
+    onUpdate: (id, changes) => {
       postToSheet({ 
         type: 'inventory_update',
-        id: id,
-        changes: changes
+        timestamp: new Date().toLocaleString('ar-SA'),
+        id,
+        changes 
       });
     },
-    onDelete: function(id) {
-      console.log('🔵 inventory.onDelete استُدعيت مع:', id);
+    onDelete: (id) => {
       postToSheet({ 
         type: 'inventory_delete',
-        id: id
+        timestamp: new Date().toLocaleString('ar-SA'),
+        id 
       });
     }
   },
   loans: {
-    onAdd: function(row) {
-      console.log('🔵 loans.onAdd استُدعيت مع:', row);
+    onAdd: (row) => {
       postToSheet({ 
         type: 'loan_add',
-        data: row
+        timestamp: new Date().toLocaleString('ar-SA'),
+        data: row 
       });
     },
-    onDelete: function(id) {
-      console.log('🔵 loans.onDelete استُدعيت مع:', id);
+    onDelete: (id) => {
       postToSheet({ 
         type: 'loan_delete',
-        id: id
+        timestamp: new Date().toLocaleString('ar-SA'),
+        id 
       });
     }
   },
   returns: {
-    onAdd: function(row) {
-      console.log('🔵 returns.onAdd استُدعيت مع:', row);
+    onAdd: (row) => {
       postToSheet({ 
         type: 'return_add',
-        data: row
+        timestamp: new Date().toLocaleString('ar-SA'),
+        data: row 
       });
     },
-    onDelete: function(id) {
-      console.log('🔵 returns.onDelete استُدعيت مع:', id);
+    onDelete: (id) => {
       postToSheet({ 
         type: 'return_delete',
-        id: id
+        timestamp: new Date().toLocaleString('ar-SA'),
+        id 
       });
     }
   }
 };
 
-console.log('✅ Google Sheets Sync Initialized - جاهز للعمل');
+console.log('✅ Google Sheets Sync Initialized');
+
