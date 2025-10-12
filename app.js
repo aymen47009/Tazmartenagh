@@ -8,7 +8,7 @@ const STORAGE_KEYS = {
   SESSION: 'session'
 };
 
-const DEFAULT_LOGIN_CODE = ''; // shared simple code
+const DEFAULT_LOGIN_CODE = '1234'; // shared simple code
 
 // State
 let state = {
@@ -22,32 +22,11 @@ let useCloud = false; // toggled when Firebase is ready
 const uid = () => Math.random().toString(36).slice(2, 10);
 const todayStr = () => new Date().toISOString().slice(0,10);
 
-// Theme helpers
-const mediaDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : { matches: true, addEventListener: ()=>{} };
-function setDataTheme(mode){
-  const theme = mode === 'light' ? 'light' : mode === 'dark' ? 'dark' : (mediaDark.matches ? 'dark' : 'light');
-  document.documentElement.setAttribute('data-theme', theme);
-}
-function applySavedTheme(){
-  const saved = localStorage.getItem('theme') || 'auto';
-  setDataTheme(saved);
-}
-function setTheme(mode){
-  localStorage.setItem('theme', mode);
-  setDataTheme(mode);
-}
-if (mediaDark && typeof mediaDark.addEventListener === 'function'){
-  mediaDark.addEventListener('change', ()=>{ if((localStorage.getItem('theme')||'auto')==='auto'){ setDataTheme('auto'); } });
-}
-
 function loadAll(){
   state.inventory = JSON.parse(localStorage.getItem(STORAGE_KEYS.INVENTORY) || '[]');
   state.loans = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOANS) || '[]');
   state.returns = JSON.parse(localStorage.getItem(STORAGE_KEYS.RETURNS) || '[]');
 }
-
-syncFromSheets(); // جلب البيانات من Google Sheets عند بدء التطبيق
-
 function save(key){
   if(key === STORAGE_KEYS.INVENTORY) localStorage.setItem(key, JSON.stringify(state.inventory));
   if(key === STORAGE_KEYS.LOANS) localStorage.setItem(key, JSON.stringify(state.loans));
@@ -172,7 +151,7 @@ function renderLoans(filter=''){
         <button class="btn danger" data-act="del">حذف</button>
       </div>`;
     el.querySelector('[data-act="del"]').onclick = ()=>{
-      if(useCloud && window.cloud){ window.cloud.deleteLoan(it.id); if(window.gsheetHooks) window.gsheetHooks.loans.onDelete(it.id); }
+      if(useCloud && window.cloud){ window.cloud.deleteLoan(it.id); }
       else {
         state.loans = state.loans.filter(x=>x.id!==it.id);
         save(STORAGE_KEYS.LOANS);
@@ -248,7 +227,7 @@ function renderReturns(filter=''){
         <button class="btn danger" data-act="del">حذف</button>
       </div>`;
     el.querySelector('[data-act="del"]').onclick = ()=>{
-      if(useCloud && window.cloud){ window.cloud.deleteReturn(it.id); if(window.gsheetHooks) window.gsheetHooks.returns.onDelete(it.id); }
+      if(useCloud && window.cloud){ window.cloud.deleteReturn(it.id); }
       else {
         state.returns = state.returns.filter(x=>x.id!==it.id);
         save(STORAGE_KEYS.RETURNS);
@@ -275,30 +254,17 @@ function renderReports(){
   for(const l of state.loans.filter(l=> l.due && l.due <= today && !isLoanFullyReturned(l))){
     const returnedQty = getReturnedQtyForLoan(l.id);
     const remainingQty = Number(l.qty) - returnedQty;
-    let daysLateStr = '';
-    try {
-      const dueDate = new Date(l.due + 'T00:00:00');
-      const now = new Date(today + 'T00:00:00');
-      const daysLate = Math.max(0, Math.round((now - dueDate) / (1000*60*60*24)));
-      daysLateStr = daysLate > 0 ? ` • متأخر ${daysLate} يوم` : '';
-    } catch {}
     const el = document.createElement('div');
     el.className='item';
     el.innerHTML = `
       <div>
         <div>${l.itemName} • ${l.qty} • ${l.person||''}</div>
-        <div class="meta">مُرجع: ${returnedQty}, متبقي: ${remainingQty}${daysLateStr}</div>
+        <div class="meta">مُرجع: ${returnedQty}, متبقي: ${remainingQty}</div>
       </div>
       <div class="meta">${l.due}</div>
       <div></div>`;
     dueList.appendChild(el);
   }
-  // In-use and damaged stats
-  const totalReturned = state.returns.reduce((s,r)=> s + Number(r.qty||0), 0);
-  const inUseEl = document.getElementById('stat_in_use');
-  if(inUseEl) inUseEl.textContent = Math.max(totalLoaned - totalReturned, 0);
-  const damagedEl = document.getElementById('stat_damaged');
-  if(damagedEl) damagedEl.textContent = state.returns.reduce((s,r)=> s + Number(r.damaged||0), 0);
 }
 
 function fillDatalists(){
@@ -327,42 +293,23 @@ function openItemDialog(id){
   if(typeof itemDialog.showModal === 'function') itemDialog.showModal();
 }
 
-// استبدل الدالة القديمة بهذه:
 function submitItemDialog(ok){
-    
-
   if(!ok){ itemDialog.close(); return; }
   const name = document.getElementById('f_name').value.trim();
   const initialQty = Number(document.getElementById('f_initialQty').value||0);
   const totalQty = Number(document.getElementById('f_totalQty').value||0);
   const notes = document.getElementById('f_notes').value.trim();
   if(!name) return;
-  
   const payload = { name, initialQty, totalQty, notes };
-  
   if(useCloud && window.cloud){
-    if(editingItemId){
-      window.cloud.updateInventory(editingItemId, payload);
-      if(window.gsheetHooks) window.gsheetHooks.inventory.onUpdate(editingItemId, payload);
-    } else {
-      window.cloud.addInventory(payload);
-      if(window.gsheetHooks) window.gsheetHooks.inventory.onAdd(payload);
-    }
+    if(editingItemId){ window.cloud.updateInventory(editingItemId, payload); }
+    else { window.cloud.addInventory(payload); }
   } else {
     if(editingItemId){
       const it = state.inventory.find(i=>i.id===editingItemId);
-      if(!it) return; 
-      Object.assign(it, payload);
-      // تحديث في Google Sheets
-      if(window.gsheetHooks) window.gsheetHooks.inventory.onUpdate(editingItemId, payload);
+      if(!it) return; Object.assign(it, payload);
     } else {
-      const newItem = { id: uid(), ...payload };
-      state.inventory.push(newItem);
-      // إرسال إلى Google Sheets مع جميع البيانات
-      if(window.gsheetHooks) {
-        console.log('📤 إرسال عتاد جديد:', newItem);
-        window.gsheetHooks.inventory.onAdd(newItem);
-      }
+      state.inventory.push({ id: uid(), ...payload });
     }
     save(STORAGE_KEYS.INVENTORY);
     renderInventory(document.getElementById('inventorySearch').value||'');
@@ -373,10 +320,7 @@ function submitItemDialog(ok){
 
 function deleteEditingItem(){
   if(!editingItemId) return;
-  if(useCloud && window.cloud){
-    window.cloud.deleteInventory(editingItemId);
-    if(window.gsheetHooks) window.gsheetHooks.inventory.onDelete(editingItemId);
-  }
+  if(useCloud && window.cloud){ window.cloud.deleteInventory(editingItemId); }
   else {
     state.inventory = state.inventory.filter(i=>i.id!==editingItemId);
     save(STORAGE_KEYS.INVENTORY);
@@ -460,53 +404,9 @@ function stopScan(){
   scanRAF=null; scanStream=null;
 }
 
-
-// ✅ ربط تطبيقك بمزامنة Google Sheets إذا كانت مفعلة
-
-
-  cloud.updateInventory = async (id, changes) => {
-    await update(ref(db, `inventory/${id}`), changes);
-    window.gsheetHooks.inventory.onUpdate(id, changes);
-  };
-
-  cloud.deleteInventory = async (id) => {
-    await remove(ref(db, `inventory/${id}`));
-    window.gsheetHooks.inventory.onDelete(id);
-  };
-
-  cloud.addLoan = async (rec) => {
-    await push(ref(db, 'loans'), rec);
-    window.gsheetHooks.loans.onAdd(rec);
-  };
-
-  cloud.deleteLoan = async (id) => {
-    await remove(ref(db, `loans/${id}`));
-    window.gsheetHooks.loans.onDelete(id);
-  };
-
-  cloud.addReturn = async (rec) => {
-    await push(ref(db, 'returns'), rec);
-    window.gsheetHooks.returns.onAdd(rec);
-  };
-
-  cloud.deleteReturn = async (id) => {
-    await remove(ref(db, `returns/${id}`));
-    window.gsheetHooks.returns.onDelete(id);
-  };
-}
-
-
-
 // Event wiring
 function init(){
   loadAll();
-  // Theme select wiring
-  applySavedTheme();
-  const themeSelect = document.getElementById('themeSelect');
-  if(themeSelect){
-    themeSelect.value = localStorage.getItem('theme') || 'auto';
-    themeSelect.onchange = ()=> setTheme(themeSelect.value);
-  }
   const logged = isLoggedIn();
   document.getElementById('view-login').classList.toggle('hidden', logged);
   document.getElementById('view-shell').classList.toggle('hidden', !logged);
@@ -537,7 +437,6 @@ function init(){
     e.preventDefault();
     const status = document.getElementById('qrStatus');
     status.textContent = '';
-
     
     // Validate fields
     const name = document.getElementById('f_name').value.trim();
@@ -606,7 +505,7 @@ function init(){
     if(!rec.itemName || rec.qty<=0) return;
     // Prevent negative available
     if(getAvailableFor(rec.itemName) - rec.qty < 0){ alert('الكمية غير متاحة'); return; }
-    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addLoan(doc); if(window.gsheetHooks) window.gsheetHooks.loans.onAdd(doc); }
+    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addLoan(doc); }
     else {
       state.loans.push(rec); save(STORAGE_KEYS.LOANS);
       renderLoans(document.getElementById('loanSearch').value||'');
@@ -653,7 +552,7 @@ function init(){
       }
     }
     
-    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addReturn(doc); if(window.gsheetHooks) window.gsheetHooks.returns.onAdd(doc); }
+    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addReturn(doc); }
     else {
       state.returns.push(rec); save(STORAGE_KEYS.RETURNS);
       renderReturns(document.getElementById('returnSearch').value||'');
