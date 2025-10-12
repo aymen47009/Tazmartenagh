@@ -5,6 +5,7 @@ const SHEETS_URL = "https://script.google.com/macros/s/AKfycbzdg0iTvS2mCUyXIOGZX
 let lastSyncTime = 0;
 let syncCheckInterval = null;
 let lastRowCount = 0;
+let isAutoSyncEnabled = false;
 
 async function postToSheet(payload) {
   if (!SHEETS_URL) {
@@ -67,7 +68,7 @@ async function syncFromSheet(dataType = 'all') {
 
 // ===== فحص عدد الصفوف =====
 async function getSheetRowCount() {
-  if (!SHEETS_URL) return 0;
+  if (!SHEETS_URL) return lastRowCount;
   
   try {
     const response = await fetch(SHEETS_URL, {
@@ -83,23 +84,30 @@ async function getSheetRowCount() {
     return result.rowCount || 0;
     
   } catch (error) {
+    console.warn('⚠️ خطأ في فحص عدد الصفوف:', error.message);
     return lastRowCount;
   }
 }
 
 // ===== دمج البيانات الجديدة فقط =====
 async function mergeNewSheetData() {
+  // تحقق من توفر البيانات الأساسية
+  if (typeof window.state === 'undefined') {
+    console.warn('⚠️ state غير متاح');
+    return false;
+  }
+  
+  if (!window.cloud) {
+    console.warn('⚠️ Firebase غير متصل');
+    return false;
+  }
+  
   console.log('🔄 فحص البيانات الجديدة من Google Sheets...');
   
   const sheetData = await syncFromSheet('all');
   
   if (!sheetData) {
     console.warn('⚠️ لا يمكن الوصول إلى Google Sheets');
-    return false;
-  }
-  
-  if (!window.cloud) {
-    console.warn('⚠️ Firebase غير متصل');
     return false;
   }
   
@@ -110,8 +118,7 @@ async function mergeNewSheetData() {
     if (sheetData.inventory && Array.isArray(sheetData.inventory)) {
       for (const item of sheetData.inventory) {
         if (item.id && item.name) {
-          // تحقق إذا كان العنصر موجود بالفعل
-          const exists = state?.inventory?.some(i => i.id === item.id);
+          const exists = window.state?.inventory?.some(i => i.id === item.id);
           if (!exists) {
             await window.cloud.addInventory(item);
             hasChanges = true;
@@ -124,7 +131,7 @@ async function mergeNewSheetData() {
     if (sheetData.loans && Array.isArray(sheetData.loans)) {
       for (const loan of sheetData.loans) {
         if (loan.id) {
-          const exists = state?.loans?.some(l => l.id === loan.id);
+          const exists = window.state?.loans?.some(l => l.id === loan.id);
           if (!exists) {
             await window.cloud.addLoan(loan);
             hasChanges = true;
@@ -137,7 +144,7 @@ async function mergeNewSheetData() {
     if (sheetData.returns && Array.isArray(sheetData.returns)) {
       for (const ret of sheetData.returns) {
         if (ret.id) {
-          const exists = state?.returns?.some(r => r.id === ret.id);
+          const exists = window.state?.returns?.some(r => r.id === ret.id);
           if (!exists) {
             await window.cloud.addReturn(ret);
             hasChanges = true;
@@ -149,11 +156,6 @@ async function mergeNewSheetData() {
     
     if (hasChanges) {
       console.log('✅ تم دمج البيانات الجديدة بنجاح!');
-      // أعد تحديث الواجهة
-      if (window.renderInventory) window.renderInventory();
-      if (window.renderLoans) window.renderLoans();
-      if (window.renderReturns) window.renderReturns();
-      if (window.renderReports) window.renderReports();
     } else {
       console.log('ℹ️ لا توجد بيانات جديدة');
     }
@@ -167,22 +169,27 @@ async function mergeNewSheetData() {
 }
 
 // ===== المراقبة التلقائية للتغييرات =====
-async function startAutoSync(intervalSeconds = 10) {
-  if (syncCheckInterval) {
+async function startAutoSync(intervalSeconds = 15) {
+  if (isAutoSyncEnabled) {
     console.log('⚠️ المراقبة التلقائية قيد التشغيل بالفعل');
+    return;
+  }
+  
+  if (!window.cloud) {
+    console.warn('❌ Firebase غير متصل - لا يمكن تشغيل المراقبة');
     return;
   }
   
   console.log(`📡 بدء المراقبة التلقائية (كل ${intervalSeconds} ثانية)...`);
   
-  // تحقق الآن
+  isAutoSyncEnabled = true;
   lastRowCount = await getSheetRowCount();
+  console.log(`✅ عدد الصفوف الحالي: ${lastRowCount}`);
   
   syncCheckInterval = setInterval(async () => {
     try {
       const currentRowCount = await getSheetRowCount();
       
-      // إذا تغير عدد الصفوف، هناك بيانات جديدة
       if (currentRowCount > lastRowCount) {
         console.log(`📨 تم اكتشاف ${currentRowCount - lastRowCount} صفوف جديدة`);
         lastRowCount = currentRowCount;
@@ -201,6 +208,7 @@ function stopAutoSync() {
   if (syncCheckInterval) {
     clearInterval(syncCheckInterval);
     syncCheckInterval = null;
+    isAutoSyncEnabled = false;
     console.log('⏹️ تم إيقاف المراقبة التلقائية');
   }
 }
@@ -271,8 +279,8 @@ window.sheetSync = {
   mergeNewSheetData,
   postToSheet,
   startAutoSync,
-  stopAutoSync
+  stopAutoSync,
+  isAutoSyncEnabled: () => isAutoSyncEnabled
 };
 
 console.log('✅ Google Sheets Sync Initialized with Auto-Monitoring');
-
