@@ -729,6 +729,49 @@ function init(){
     }
     if(tries>=maxTries) clearInterval(t);
   }, 100);
+
+  // أضف هذا الكود في نهاية دالة init() في app.js، بعد اتصال Firebase
+
+// ===== بدء المراقبة التلقائية للتغييرات =====
+// انتظر لمدة ثانية للتأكد من تحميل جميع الملفات
+setTimeout(() => {
+  if (window.sheetSync && window.cloud) {
+    // بدء المراقبة كل 15 ثانية (يمكنك تغيير الرقم)
+    window.sheetSync.startAutoSync(15);
+    console.log('✅ تم تشغيل المراقبة التلقائية للـ Google Sheets');
+  } else {
+    console.warn('⚠️ Google Sheets Sync أو Firebase غير متاح');
+  }
+}, 1000);
+
+// اختياري: إضافة زر للتحكم في المراقبة
+const controlPanel = document.querySelector('.top-actions');
+if (controlPanel) {
+  // زر إيقاف/تشغيل المراقبة
+  const syncControlBtn = document.createElement('button');
+  syncControlBtn.id = 'syncControlBtn';
+  syncControlBtn.className = 'btn secondary';
+  syncControlBtn.textContent = '⏸️ إيقاف المراقبة';
+  syncControlBtn.style.marginLeft = '8px';
+  
+  let isSyncRunning = true;
+  
+  syncControlBtn.onclick = () => {
+    if (isSyncRunning) {
+      window.sheetSync?.stopAutoSync();
+      syncControlBtn.textContent = '▶️ تشغيل المراقبة';
+      console.log('تم إيقاف المراقبة');
+    } else {
+      window.sheetSync?.startAutoSync(15);
+      syncControlBtn.textContent = '⏸️ إيقاف المراقبة';
+      console.log('تم تشغيل المراقبة');
+    }
+    isSyncRunning = !isSyncRunning;
+  };
+  
+  controlPanel.insertBefore(syncControlBtn, controlPanel.firstChild);
+}
+  
 }
 
 window.addEventListener('DOMContentLoaded', init);
