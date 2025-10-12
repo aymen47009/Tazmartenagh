@@ -293,7 +293,49 @@ function openItemDialog(id){
   if(typeof itemDialog.showModal === 'function') itemDialog.showModal();
 }
 
+  function submitItemDialog(ok){
   if(!ok){ itemDialog.close(); return; }
+  const name = document.getElementById('f_name').value.trim();
+  const initialQty = Number(document.getElementById('f_initialQty').value||0);
+  const totalQty = Number(document.getElementById('f_totalQty').value||0);
+  const notes = document.getElementById('f_notes').value.trim();
+  if(!name) return;
+  
+  const payload = { name, initialQty, totalQty, notes };
+  
+  if(useCloud && window.cloud){
+    if(editingItemId){ 
+      window.cloud.updateInventory(editingItemId, payload); 
+    }
+    else { 
+      window.cloud.addInventory(payload); 
+    }
+  } else {
+    if(editingItemId){
+      const it = state.inventory.find(i=>i.id===editingItemId);
+      if(!it) return; 
+      Object.assign(it, payload);
+      // تحديث في Google Sheets
+      if(window.gsheetHooks) {
+        console.log('📤 تحديث عتاد:', it);
+        window.gsheetHooks.inventory.onUpdate(editingItemId, payload);
+      }
+    } else {
+      const newItem = { id: uid(), ...payload };
+      state.inventory.push(newItem);
+      
+      // إرسال إلى Google Sheets
+      if(window.gsheetHooks) {
+        console.log('📤 إرسال عتاد جديد:', newItem);
+        window.gsheetHooks.inventory.onAdd(newItem);
+      }
+    }
+    save(STORAGE_KEYS.INVENTORY);
+    renderInventory(document.getElementById('inventorySearch').value||'');
+    fillDatalists();
+  }
+  itemDialog.close();
+}
 function deleteEditingItem(){
   if(!editingItemId) return;
   if(useCloud && window.cloud){ window.cloud.deleteInventory(editingItemId); }
