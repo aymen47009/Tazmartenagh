@@ -293,40 +293,44 @@ function openItemDialog(id){
   if(typeof itemDialog.showModal === 'function') itemDialog.showModal();
 }
 
-  function submitItemDialog(ok){
+ // ===== في دالة submitItemDialog =====
+function submitItemDialog(ok){
   if(!ok){ itemDialog.close(); return; }
   const name = document.getElementById('f_name').value.trim();
   const initialQty = Number(document.getElementById('f_initialQty').value||0);
   const totalQty = Number(document.getElementById('f_totalQty').value||0);
   const notes = document.getElementById('f_notes').value.trim();
   if(!name) return;
-  
   const payload = { name, initialQty, totalQty, notes };
-  
   if(useCloud && window.cloud){
     if(editingItemId){ 
-      window.cloud.updateInventory(editingItemId, payload); 
+      window.cloud.updateInventory(editingItemId, payload);
+      // ✅ أضف هذا السطر
+      if(window.gsheetHooks?.inventory?.onUpdate) {
+        window.gsheetHooks.inventory.onUpdate(editingItemId, payload);
+      }
     }
     else { 
-      window.cloud.addInventory(payload); 
+      window.cloud.addInventory(payload);
+      // ✅ أضف هذا السطر
+      if(window.gsheetHooks?.inventory?.onAdd) {
+        window.gsheetHooks.inventory.onAdd(payload);
+      }
     }
   } else {
     if(editingItemId){
       const it = state.inventory.find(i=>i.id===editingItemId);
       if(!it) return; 
       Object.assign(it, payload);
-      // تحديث في Google Sheets
-      if(window.gsheetHooks) {
-        console.log('📤 تحديث عتاد:', it);
+      // ✅ أضف هذا السطر
+      if(window.gsheetHooks?.inventory?.onUpdate) {
         window.gsheetHooks.inventory.onUpdate(editingItemId, payload);
       }
     } else {
       const newItem = { id: uid(), ...payload };
       state.inventory.push(newItem);
-      
-      // إرسال إلى Google Sheets
-      if(window.gsheetHooks) {
-        console.log('📤 إرسال عتاد جديد:', newItem);
+      // ✅ أضف هذا السطر
+      if(window.gsheetHooks?.inventory?.onAdd) {
         window.gsheetHooks.inventory.onAdd(newItem);
       }
     }
@@ -336,6 +340,120 @@ function openItemDialog(id){
   }
   itemDialog.close();
 }
+
+// ===== في دالة حذف العناصر =====
+function deleteEditingItem(){
+  if(!editingItemId) return;
+  if(useCloud && window.cloud){ 
+    window.cloud.deleteInventory(editingItemId);
+    // ✅ أضف هذا السطر
+    if(window.gsheetHooks?.inventory?.onDelete) {
+      window.gsheetHooks.inventory.onDelete(editingItemId);
+    }
+  }
+  else {
+    state.inventory = state.inventory.filter(i=>i.id!==editingItemId);
+    // ✅ أضف هذا السطر
+    if(window.gsheetHooks?.inventory?.onDelete) {
+      window.gsheetHooks.inventory.onDelete(editingItemId);
+    }
+    save(STORAGE_KEYS.INVENTORY);
+    renderInventory(document.getElementById('inventorySearch').value||'');
+  }
+  itemDialog.close();
+}
+
+// ===== في معالج نموذج الإعارات =====
+document.getElementById('loanForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const rec = {
+    id: uid(),
+    itemName: document.getElementById('loan_item').value.trim(),
+    qty: Number(document.getElementById('loan_qty').value||0),
+    person: document.getElementById('loan_person').value.trim(),
+    phone: document.getElementById('loan_phone').value.trim(),
+    dept: document.getElementById('loan_dept').value.trim(),
+    date: document.getElementById('loan_date').value,
+    due: document.getElementById('loan_due').value,
+    returnedQty: 0
+  };
+  if(!rec.itemName || rec.qty<=0) return;
+  if(getAvailableFor(rec.itemName) - rec.qty < 0){ alert('الكمية غير متاحة'); return; }
+  
+  if(useCloud && window.cloud){ 
+    const { id, ...doc } = rec; 
+    window.cloud.addLoan(doc);
+    // ✅ أضف هذا السطر
+    if(window.gsheetHooks?.loans?.onAdd) {
+      window.gsheetHooks.loans.onAdd(rec);
+    }
+  }
+  else {
+    state.loans.push(rec); 
+    // ✅ أضف هذا السطر
+    if(window.gsheetHooks?.loans?.onAdd) {
+      window.gsheetHooks.loans.onAdd(rec);
+    }
+    save(STORAGE_KEYS.LOANS);
+    renderLoans(document.getElementById('loanSearch').value||'');
+    renderInventory(document.getElementById('inventorySearch').value||'');
+    renderReports();
+  }
+  (e.target).reset(); 
+  document.getElementById('loan_date').value = todayStr();
+});
+
+// ===== في معالج نموذج الإرجاعات =====
+document.getElementById('returnForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const loanId = document.getElementById('ret_loanId').value;
+  const rec = {
+    id: uid(),
+    date: document.getElementById('ret_date').value,
+    itemName: document.getElementById('ret_item').value.trim(),
+    qty: Number(document.getElementById('ret_qty').value||0),
+    damaged: Number(document.getElementById('ret_damaged').value||0),
+    notes: document.getElementById('ret_notes').value.trim(),
+    loanId: loanId || null
+  };
+  if(!rec.itemName) return;
+  
+  if(loanId) {
+    const loan = state.loans.find(l => l.id === loanId);
+    if(loan) {
+      const alreadyReturned = getReturnedQtyForLoan(loanId);
+      const maxReturnable = Number(loan.qty) - alreadyReturned;
+      if(rec.qty > maxReturnable) {
+        alert(`لا يمكن إرجاع أكثر من ${maxReturnable} (المتبقي من السلفية)`);
+        return;
+      }
+    }
+  }
+  
+  if(useCloud && window.cloud){ 
+    const { id, ...doc } = rec; 
+    window.cloud.addReturn(doc);
+    // ✅ أضف هذا السطر
+    if(window.gsheetHooks?.returns?.onAdd) {
+      window.gsheetHooks.returns.onAdd(rec);
+    }
+  }
+  else {
+    state.returns.push(rec);
+    // ✅ أضف هذا السطر
+    if(window.gsheetHooks?.returns?.onAdd) {
+      window.gsheetHooks.returns.onAdd(rec);
+    }
+    save(STORAGE_KEYS.RETURNS);
+    renderReturns(document.getElementById('returnSearch').value||'');
+    renderLoans(document.getElementById('loanSearch').value||'');
+    renderInventory(document.getElementById('inventorySearch').value||'');
+    renderReports();
+  }
+  (e.target).reset(); 
+  document.getElementById('ret_date').value = todayStr(); 
+  document.getElementById('ret_damaged').value = 0;
+});
 function deleteEditingItem(){
   if(!editingItemId) return;
   if(useCloud && window.cloud){ window.cloud.deleteInventory(editingItemId); }
