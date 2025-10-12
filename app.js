@@ -641,9 +641,9 @@ function init(){
     if(!rec.itemName || rec.qty<=0) return;
     // Prevent negative available
     if(getAvailableFor(rec.itemName) - rec.qty < 0){ alert('الكمية غير متاحة'); return; }
-    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addLoan(doc); }
+    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addLoan(doc); if(window.gsheetHooks?.loans?.onAdd) window.gsheetHooks.loans.onAdd(rec); }
     else {
-      state.loans.push(rec); save(STORAGE_KEYS.LOANS);
+      state.loans.push(rec); save(STORAGE_KEYS.LOANS); if(window.gsheetHooks?.loans?.onAdd) window.gsheetHooks.loans.onAdd(rec);
       renderLoans(document.getElementById('loanSearch').value||'');
       renderInventory(document.getElementById('inventorySearch').value||'');
       renderReports();
@@ -688,9 +688,9 @@ function init(){
       }
     }
     
-    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addReturn(doc); }
+    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addReturn(doc); if(window.gsheetHooks?.returns?.onAdd) window.gsheetHooks.returns.onAdd(rec); }
     else {
-      state.returns.push(rec); save(STORAGE_KEYS.RETURNS);
+      state.returns.push(rec); save(STORAGE_KEYS.RETURNS); if(window.gsheetHooks?.returns?.onAdd) window.gsheetHooks.returns.onAdd(rec);
       renderReturns(document.getElementById('returnSearch').value||'');
       renderLoans(document.getElementById('loanSearch').value||''); // Refresh loans to show updated status
       renderInventory(document.getElementById('inventorySearch').value||'');
@@ -730,50 +730,60 @@ function init(){
     if(tries>=maxTries) clearInterval(t);
   }, 100);
 
-  // أضف هذا الكود في نهاية دالة init() في app.js، بعد اتصال Firebase
-
-// ===== بدء المراقبة التلقائية للتغييرات =====
-// انتظر لمدة ثانية للتأكد من تحميل جميع الملفات
-setTimeout(() => {
-  if (window.sheetSync && window.cloud) {
-    // بدء المراقبة كل 15 ثانية (يمكنك تغيير الرقم)
-    window.sheetSync.startAutoSync(15);
-    console.log('✅ تم تشغيل المراقبة التلقائية للـ Google Sheets');
-  } else {
-    console.warn('⚠️ Google Sheets Sync أو Firebase غير متاح');
-  }
-}, 1000);
-
-// اختياري: إضافة زر للتحكم في المراقبة
-const controlPanel = document.querySelector('.top-actions');
-if (controlPanel) {
-  // زر إيقاف/تشغيل المراقبة
-  const syncControlBtn = document.createElement('button');
-  syncControlBtn.id = 'syncControlBtn';
-  syncControlBtn.className = 'btn secondary';
-  syncControlBtn.textContent = '⏸️ إيقاف المراقبة';
-  syncControlBtn.style.marginLeft = '8px';
-  
-  let isSyncRunning = true;
-  
-  syncControlBtn.onclick = () => {
-    if (isSyncRunning) {
-      window.sheetSync?.stopAutoSync();
-      syncControlBtn.textContent = '▶️ تشغيل المراقبة';
-      console.log('تم إيقاف المراقبة');
-    } else {
-      window.sheetSync?.startAutoSync(15);
-      syncControlBtn.textContent = '⏸️ إيقاف المراقبة';
-      console.log('تم تشغيل المراقبة');
+  // ===== بدء المراقبة التلقائية للتغييرات =====
+  let autoSyncCheckCount = 0;
+  const autoSyncCheckInterval = setInterval(() => {
+    autoSyncCheckCount++;
+    
+    // تحقق من Firebase والـ Sheet Sync
+    if (window.cloud && window.sheetSync && useCloud) {
+      clearInterval(autoSyncCheckInterval);
+      
+      try {
+        // بدء المراقبة التلقائية (كل 15 ثانية)
+        window.sheetSync.startAutoSync(15);
+        console.log('✅ تم تشغيل المراقبة التلقائية');
+        
+        // أضف زر التحكم في المراقبة
+        setTimeout(() => {
+          const controlPanel = document.querySelector('.top-actions');
+          if (controlPanel && !document.getElementById('syncControlBtn')) {
+            const syncControlBtn = document.createElement('button');
+            syncControlBtn.id = 'syncControlBtn';
+            syncControlBtn.className = 'btn secondary';
+            syncControlBtn.textContent = '⏸️ إيقاف المراقبة';
+            syncControlBtn.style.marginLeft = '8px';
+            
+            let isSyncRunning = true;
+            
+            syncControlBtn.onclick = () => {
+              if (isSyncRunning) {
+                window.sheetSync?.stopAutoSync();
+                syncControlBtn.textContent = '▶️ تشغيل المراقبة';
+                console.log('تم إيقاف المراقبة');
+              } else {
+                window.sheetSync?.startAutoSync(15);
+                syncControlBtn.textContent = '⏸️ إيقاف المراقبة';
+                console.log('تم تشغيل المراقبة');
+              }
+              isSyncRunning = !isSyncRunning;
+            };
+            
+            controlPanel.insertBefore(syncControlBtn, controlPanel.firstChild);
+          }
+        }, 500);
+        
+      } catch (error) {
+        console.error('خطأ في تشغيل المراقبة:', error);
+      }
+    } 
+    
+    // توقف بعد 15 ثانية من المحاولة
+    if (autoSyncCheckCount > 150) {
+      clearInterval(autoSyncCheckInterval);
+      console.warn('⚠️ لم يتمكن من تشغيل المراقبة التلقائية');
     }
-    isSyncRunning = !isSyncRunning;
-  };
-  
-  controlPanel.insertBefore(syncControlBtn, controlPanel.firstChild);
-}
-  
+  }, 100);
 }
 
 window.addEventListener('DOMContentLoaded', init);
-
-
