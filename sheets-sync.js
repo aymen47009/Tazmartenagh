@@ -140,11 +140,14 @@ async function mergeNewSheetData() {
     if (!item || !item.name) continue;
 
     // 🔍 تحقق إذا كان العنصر موجود فعلاً في قاعدة البيانات (بناءً على الاسم أو الرقم)
-    const exists = firebaseItems.some(
-      (i) =>
-        i.name.trim() === item.name.trim() ||
-        (i.number && i.number === item.number)
-    );
+    // 🔍 تحقق ذكي لتجنب التكرار حتى مع اختلاف بسيط في الاسم
+const normalize = (str) => str.toLowerCase().trim().replace(/\s+/g, '');
+const exists = firebaseItems.some((i) => {
+  const existingName = normalize(i.name || '');
+  const newName = normalize(item.name || '');
+  return existingName === newName || (i.number && i.number === item.number);
+});
+
 
     if (!exists) {
       console.log(`🆕 إضافة عنصر جديد إلى Firebase: ${item.name}`);
