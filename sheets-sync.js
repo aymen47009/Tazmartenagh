@@ -112,6 +112,9 @@ function convertSheetRowToObject(row, headers) {
 // ===== دمج البيانات الجديدة من Google Sheets =====
 const lastSyncedNumber = window.lastSyncedNumber || 0;
 
+// تأكد أن المتغير موجود على window
+window.lastSyncedNumber = window.lastSyncedNumber || 0;
+
 async function mergeNewSheetData() {
   if (!window.state?.inventory || !window.cloud) return false;
 
@@ -125,7 +128,7 @@ async function mergeNewSheetData() {
     if (row[0] === "رقم" || row[0] === "number") continue;
 
     const number = Number(row[0]);
-    if (number <= lastSyncedNumber) continue; // تخطي الصفوف القديمة
+    if (number <= window.lastSyncedNumber) continue; // تخطي الصفوف القديمة
 
     const item = convertSheetRowToObject(row);
     if (!item) continue;
@@ -133,7 +136,6 @@ async function mergeNewSheetData() {
     const existing = firebaseItems.find(i => i.number === item.number);
 
     if (existing) {
-      // تحديث الصف إذا تغيرت القيم
       const changed = ['name','notes','originalQty','totalQty','availableQty'].some(key => existing[key] !== item[key]);
       if (changed) {
         console.log(`✏️ تحديث العنصر في Firebase: ${item.name}`);
@@ -146,11 +148,13 @@ async function mergeNewSheetData() {
       hasChanges = true;
     }
 
+    // تحديث المتغير العالمي بعد كل صف
     if (number > window.lastSyncedNumber) window.lastSyncedNumber = number;
   }
 
   return hasChanges;
 }
+
 
 
 
