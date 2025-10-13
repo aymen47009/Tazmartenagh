@@ -1,11 +1,9 @@
-// ===== إعداد رابط Google Sheets =====
+// ===== رابط Google Sheets Web App =====
 const SHEETS_URL = "https://script.google.com/macros/s/AKfycbxnbI_JZ1GEkFXD0gvj8gqpdoKQ9GIYZ9_cvWtAqUGdvP3HUgaleO8-0eL8ISDGlZxUSg/exec";
 
-// ===== متغيرات التحكم =====
+// ===== المتغيرات =====
 let autoSyncInterval = null;
 let isAutoSyncRunning = false;
-
-// حفظ آخر وقت مزامنة
 const LAST_SYNC_KEY = 'lastSyncTime';
 
 function getLastSyncTime() {
@@ -47,20 +45,20 @@ async function fetchSheetData() {
 
 // ===== تحويل صف Google Sheets إلى كائن =====
 function rowToItem(row) {
-  if (!row || row[0] === 'رقم') return null;
+  if (!row || row[0] === 'UUID') return null;
   return {
-    id: `item_${row[0]}`,
-    number: row[0],
-    name: row[1] || '',
-    originalQty: parseInt(row[2]) || 0,
-    totalQty: parseInt(row[3]) || 0,
-    availableQty: parseInt(row[4]) || 0,
-    notes: row[5] || '',
-    lastModified: row[6] || new Date().toISOString() // عمود إضافي لتاريخ التعديل
+    id: row[0],                 // UUID
+    number: row[1],
+    name: row[2] || '',
+    originalQty: parseInt(row[3]) || 0,
+    totalQty: parseInt(row[4]) || 0,
+    availableQty: parseInt(row[5]) || 0,
+    notes: row[6] || '',
+    lastModified: row[7] || new Date().toISOString()
   };
 }
 
-// ===== دمج البيانات مع Firebase =====
+// ===== دمج البيانات من Google Sheets إلى Firebase =====
 async function mergeSheetToFirebase() {
   if (!window.state?.inventory || !window.cloud) return false;
 
@@ -75,27 +73,23 @@ async function mergeSheetToFirebase() {
     const item = rowToItem(row);
     if (!item) continue;
 
-    // تجاهل الصفوف القديمة حسب Timestamp
     const rowTime = new Date(item.lastModified).getTime();
     if (rowTime <= getLastSyncTime()) continue;
 
-    // تحقق من وجود العنصر بالفعل
-    let existing = firebaseItems.find(i => i.number === item.number);
+    let existing = firebaseItems.find(i => i.id === item.id);
 
     if (existing) {
-      // تحديث الحقول إذا تغيرت
       const keys = ['name','originalQty','totalQty','availableQty','notes'];
       const changed = keys.some(k => existing[k] !== item[k]);
       if (changed) {
-        console.log(`✏️ تحديث: ${item.name}`);
+        console.log(`✏️ تحديث Firebase من Sheets: ${item.name}`);
         await window.cloud.updateInventory(existing.id, item);
         changesMade = true;
       }
     } else {
-      // إضافة جديدة فقط إذا الرقم غير موجود
-      console.log(`🆕 إضافة جديد: ${item.name}`);
+      console.log(`🆕 إضافة جديد إلى Firebase من Sheets: ${item.name}`);
       await window.cloud.addInventory(item);
-      firebaseItems.push(item); // إضافة إلى الذاكرة لتجنب إعادة الإضافة في نفس الجلسة
+      firebaseItems.push(item); // لتجنب الإضافة المكررة في نفس الجلسة
       changesMade = true;
     }
 
@@ -106,28 +100,60 @@ async function mergeSheetToFirebase() {
   return changesMade;
 }
 
+// ===== إرسال تغييرات Firebase إلى Google Sheets =====
+function setupFirebaseHooks() {
+  if (!window.gsheetHooks || !window.cloud) return;
 
-// ===== المراقبة التلقائية =====
+  // عند إضافة عنصر
+  window.cloud.onAddInventory = async (item) => {
+    await postToSheet({
+      type: 'inventory_add',
+      data: item,
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  // عند تحديث عنصر
+  window.cloud.onUpdateInventory = async (id, changes) => {
+    await postToSheet({
+      type: 'inventory_update',
+      id,
+      changes,
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  // عند حذف عنصر
+  window.cloud.onDeleteInventory = async (id) => {
+    await postToSheet({
+      type: 'inventory_delete',
+      id,
+      timestamp: new Date().toISOString()
+    });
+  };
+}
+
+// ===== المزامنة التلقائية =====
 function startAutoSync(intervalSeconds = 15) {
   if (isAutoSyncRunning) return;
 
-  console.log(`📡 بدء المراقبة كل ${intervalSeconds} ثانية`);
+  console.log(`📡 بدء المزامنة التلقائية كل ${intervalSeconds} ثانية`);
   isAutoSyncRunning = true;
 
-  // مزامنة أولية
-  mergeSheetToFirebase();
+  mergeSheetToFirebase();   // مزامنة أولية
+  setupFirebaseHooks();     // ربط Firebase → Sheets
 
   autoSyncInterval = setInterval(() => {
-    mergeSheetToFirebase();
+    mergeSheetToFirebase(); // مزامنة دورية
   }, intervalSeconds * 1000);
 }
 
-// ===== إيقاف المراقبة =====
+// ===== إيقاف المزامنة =====
 function stopAutoSync() {
   if (autoSyncInterval) clearInterval(autoSyncInterval);
   autoSyncInterval = null;
   isAutoSyncRunning = false;
-  console.log('⏹️ المراقبة التلقائية توقفت');
+  console.log('⏹️ تم إيقاف المزامنة التلقائية');
 }
 
 // ===== مزامنة يدوية =====
@@ -145,4 +171,4 @@ window.sheetSync = {
   manualSync
 };
 
-console.log('✅ Google Sheets Auto-Sync Initialized');
+console.log('✅ Firebase ↔ Google Sheets Auto-Sync Initialized');
