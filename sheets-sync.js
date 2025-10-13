@@ -63,11 +63,11 @@ function rowToItem(row) {
 // ===== دمج البيانات مع Firebase =====
 async function mergeSheetToFirebase() {
   if (!window.state?.inventory || !window.cloud) return false;
-  
+
   const firebaseItems = window.state.inventory;
   const sheetRows = await fetchSheetData();
   if (!sheetRows.length) return false;
-  
+
   let changesMade = false;
   let maxTimestamp = getLastSyncTime();
 
@@ -75,13 +75,15 @@ async function mergeSheetToFirebase() {
     const item = rowToItem(row);
     if (!item) continue;
 
-    // تحقق من Timestamp لتجنب إعادة المزامنة
+    // تجاهل الصفوف القديمة حسب Timestamp
     const rowTime = new Date(item.lastModified).getTime();
     if (rowTime <= getLastSyncTime()) continue;
 
-    const existing = firebaseItems.find(i => i.number === item.number);
+    // تحقق من وجود العنصر بالفعل
+    let existing = firebaseItems.find(i => i.number === item.number);
+
     if (existing) {
-      // تحقق من أي تغيير
+      // تحديث الحقول إذا تغيرت
       const keys = ['name','originalQty','totalQty','availableQty','notes'];
       const changed = keys.some(k => existing[k] !== item[k]);
       if (changed) {
@@ -90,8 +92,10 @@ async function mergeSheetToFirebase() {
         changesMade = true;
       }
     } else {
+      // إضافة جديدة فقط إذا الرقم غير موجود
       console.log(`🆕 إضافة جديد: ${item.name}`);
       await window.cloud.addInventory(item);
+      firebaseItems.push(item); // إضافة إلى الذاكرة لتجنب إعادة الإضافة في نفس الجلسة
       changesMade = true;
     }
 
@@ -101,6 +105,7 @@ async function mergeSheetToFirebase() {
   setLastSyncTime(maxTimestamp);
   return changesMade;
 }
+
 
 // ===== المراقبة التلقائية =====
 function startAutoSync(intervalSeconds = 15) {
