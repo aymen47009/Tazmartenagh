@@ -1,5 +1,5 @@
 // Google Sheets Sync - مع مراقبة تلقائية للتغييرات
-const SHEETS_URL = "https://script.google.com/macros/s/AKfycbz7LwtbbuapoF2O8dONgZ9NYjMZUrC_ysQqtpCFvWoQ5InJdtlMGWtxSCrTm_dlRufzzA/exec";
+const SHEETS_URL = "https://script.google.com/macros/s/AKfycbyqCZ9_MEpoyoMTkdMKgLpOj2-6KRFcEqQm5IEii6FGJpEnHKPbOUI8fMrZeRL-b_Ztjw/exec";
 
 // متغيرات التتبع
 let lastSyncTime = 0;
@@ -284,6 +284,7 @@ window.sheetSync = {
 };
 
 console.log('✅ Google Sheets Sync Initialized with Auto-Monitoring');
+
 
 
 
