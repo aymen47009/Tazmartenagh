@@ -787,3 +787,7 @@ function init(){
 }
 
 window.addEventListener('DOMContentLoaded', init);
+// 🧠 حالة التطبيق العامة
+window.state = {
+  inventory: []
+};
