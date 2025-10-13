@@ -1,174 +1,288 @@
-// ===== إعداد رابط Google Apps Script Web App =====
+// Google Sheets Sync - مع مراقبة تلقائية للتغييرات
 const SHEETS_URL = "https://script.google.com/macros/s/AKfycbz0sqe3_5rSiSVUZBAXpTYRK_snSyVvCQGYCHRNy4BIWmI54GqP6_qgNR2-HYLLC6cOcA/exec";
 
-// ===== دالة إرسال آمنة بدون خطأ CORS =====
-async function safeFetch(url, options = {}) {
-  try {
-    const response = await fetch(url, {
-      ...options,
-      mode: "cors", // يسمح بـ CORS
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-    return await response.json();
-  } catch (err) {
-    console.warn("⚠️ فشل الاتصال المباشر بسبب CORS، سيتم استخدام الخطة B:", err.message);
+// متغيرات التتبع
+let lastSyncTime = 0;
+let syncCheckInterval = null;
+let lastRowCount = 0;
+let isAutoSyncEnabled = false;
 
-    // 🧩 الخطة B — عبر proxy من Google Apps Script نفسه
-    try {
-      const proxyUrl = `${SHEETS_URL}?proxyMode=true&t=${Date.now()}`;
-      const resp = await fetch(proxyUrl, {
-        method: "POST",
-        body: options.body || null,
-      });
-      return await resp.json();
-    } catch (e2) {
-      console.error("❌ كلا الطريقتين فشلتا:", e2);
+async function postToSheet(payload) {
+  if (!SHEETS_URL) {
+    console.warn('❌ لم يتم تحديد رابط Google Sheets');
+    return;
+  }
+  
+  try {
+    console.log('📤 إرسال البيانات:', payload);
+    
+    const response = await fetch(SHEETS_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      console.warn(`⚠️ Server responded with status: ${response.status}`);
+      return;
+    }
+    
+    const result = await response.json();
+    console.log('✅ تم الحفظ في Google Sheets:', result);
+    
+  } catch (error) {
+    console.warn('⚠️ Google Sheets sync (optional):', error.message);
+  }
+}
+
+// ===== استرجاع البيانات من Google Sheets =====
+async function syncFromSheet(dataType = 'all') {
+  if (!SHEETS_URL) {
+    console.warn('❌ لم يتم تحديد رابط Google Sheets');
+    return null;
+  }
+  
+  try {
+    const response = await fetch(SHEETS_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'sync_read',
+        dataType: dataType
+      })
+    });
+    
+    if (!response.ok) {
+      console.warn(`⚠️ Server responded with status: ${response.status}`);
       return null;
     }
-  }
-}
-
-// ===== إرسال بيانات إلى Google Sheets =====
-async function postToSheet(payload) {
-  if (!SHEETS_URL) return console.warn("❌ لم يتم تحديد الرابط");
-
-  console.log("📤 إرسال البيانات:", payload);
-  const result = await safeFetch(SHEETS_URL, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-
-  if (result && result.success) {
-    console.log("✅ تم الحفظ:", result.message || "تم بنجاح");
-  } else {
-    console.warn("⚠️ فشل في الحفظ:", result?.error || "غير معروف");
-  }
-}
-
-// ===== استرجاع كل البيانات =====
-async function syncFromSheet() {
-  const result = await safeFetch(SHEETS_URL, {
-    method: "POST",
-    body: JSON.stringify({ type: "sync_read" }),
-  });
-
-  if (result && result.success) {
-    console.log("✅ تم جلب البيانات من Sheets");
-    return result.data;
-  } else {
-    console.warn("⚠️ فشل في قراءة البيانات:", result?.error);
+    
+    const result = await response.json();
+    console.log('✅ تم استرجاع البيانات من Google Sheets');
+    
+    return result.data || result;
+    
+  } catch (error) {
+    console.warn('⚠️ Google Sheets sync read failed:', error.message);
     return null;
   }
 }
 
 // ===== فحص عدد الصفوف =====
 async function getSheetRowCount() {
-  const result = await safeFetch(SHEETS_URL, {
-    method: "POST",
-    body: JSON.stringify({ type: "get_row_count" }),
-  });
-
-  return result?.rowCount || 0;
+  if (!SHEETS_URL) return lastRowCount;
+  
+  try {
+    const response = await fetch(SHEETS_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'get_row_count'
+      })
+    });
+    
+    if (!response.ok) return lastRowCount;
+    
+    const result = await response.json();
+    return result.rowCount || 0;
+    
+  } catch (error) {
+    console.warn('⚠️ خطأ في فحص عدد الصفوف:', error.message);
+    return lastRowCount;
+  }
 }
 
-// ===== دمج البيانات الجديدة مع Firebase =====
+// ===== دمج البيانات الجديدة فقط =====
 async function mergeNewSheetData() {
-  if (!window.cloud || !window.state) {
-    console.warn("⚠️ لا يمكن الدمج، لم يتم تحميل Firebase أو state");
-    return;
+  // تحقق من توفر البيانات الأساسية
+  if (typeof window.state === 'undefined') {
+    console.warn('⚠️ state غير متاح');
+    return false;
   }
-
-  console.log("🔄 فحص بيانات جديدة...");
-  const sheetData = await syncFromSheet();
-  if (!sheetData) return;
-
+  
+  if (!window.cloud) {
+    console.warn('⚠️ Firebase غير متصل');
+    return false;
+  }
+  
+  console.log('🔄 فحص البيانات الجديدة من Google Sheets...');
+  
+  const sheetData = await syncFromSheet('all');
+  
+  if (!sheetData) {
+    console.warn('⚠️ لا يمكن الوصول إلى Google Sheets');
+    return false;
+  }
+  
   let hasChanges = false;
-
-  for (const item of sheetData.inventory || []) {
-    if (!window.state.inventory.some(i => i.id === item.id)) {
-      await window.cloud.addInventory(item);
-      console.log("✅ تمت إضافة عنصر:", item.name);
-      hasChanges = true;
+  
+  try {
+    // إضافة العناصر الجديدة من Sheets
+    if (sheetData.inventory && Array.isArray(sheetData.inventory)) {
+      for (const item of sheetData.inventory) {
+        if (item.id && item.name) {
+          const exists = window.state?.inventory?.some(i => i.id === item.id);
+          if (!exists) {
+            await window.cloud.addInventory(item);
+            hasChanges = true;
+            console.log('✅ تم إضافة عنصر جديد:', item.name);
+          }
+        }
+      }
     }
-  }
-
-  for (const loan of sheetData.loans || []) {
-    if (!window.state.loans.some(l => l.id === loan.id)) {
-      await window.cloud.addLoan(loan);
-      console.log("✅ تمت إضافة إعارة جديدة");
-      hasChanges = true;
+    
+    if (sheetData.loans && Array.isArray(sheetData.loans)) {
+      for (const loan of sheetData.loans) {
+        if (loan.id) {
+          const exists = window.state?.loans?.some(l => l.id === loan.id);
+          if (!exists) {
+            await window.cloud.addLoan(loan);
+            hasChanges = true;
+            console.log('✅ تم إضافة إعارة جديدة');
+          }
+        }
+      }
     }
-  }
-
-  for (const ret of sheetData.returns || []) {
-    if (!window.state.returns.some(r => r.id === ret.id)) {
-      await window.cloud.addReturn(ret);
-      console.log("✅ تمت إضافة إرجاع جديد");
-      hasChanges = true;
+    
+    if (sheetData.returns && Array.isArray(sheetData.returns)) {
+      for (const ret of sheetData.returns) {
+        if (ret.id) {
+          const exists = window.state?.returns?.some(r => r.id === ret.id);
+          if (!exists) {
+            await window.cloud.addReturn(ret);
+            hasChanges = true;
+            console.log('✅ تم إضافة إرجاع جديد');
+          }
+        }
+      }
     }
+    
+    if (hasChanges) {
+      console.log('✅ تم دمج البيانات الجديدة بنجاح!');
+    } else {
+      console.log('ℹ️ لا توجد بيانات جديدة');
+    }
+    
+    return hasChanges;
+    
+  } catch (error) {
+    console.error('❌ خطأ في دمج البيانات:', error);
+    return false;
   }
-
-  if (hasChanges) console.log("✅ تم الدمج بنجاح!");
-  else console.log("ℹ️ لا توجد بيانات جديدة.");
 }
 
-// ===== مراقبة تلقائية =====
-let autoSyncTimer = null;
-async function startAutoSync(interval = 20) {
-  if (autoSyncTimer) {
-    console.warn("⚠️ المزامنة التلقائية تعمل بالفعل");
+// ===== المراقبة التلقائية للتغييرات =====
+async function startAutoSync(intervalSeconds = 15) {
+  if (isAutoSyncEnabled) {
+    console.log('⚠️ المراقبة التلقائية قيد التشغيل بالفعل');
     return;
   }
-
-  console.log(`📡 بدء المراقبة (كل ${interval} ثانية)`);
-  let lastCount = await getSheetRowCount();
-
-  autoSyncTimer = setInterval(async () => {
-    const newCount = await getSheetRowCount();
-    if (newCount > lastCount) {
-      console.log(`🆕 تم اكتشاف ${newCount - lastCount} صفوف جديدة`);
-      lastCount = newCount;
-      await mergeNewSheetData();
+  
+  if (!window.cloud) {
+    console.warn('❌ Firebase غير متصل - لا يمكن تشغيل المراقبة');
+    return;
+  }
+  
+  console.log(`📡 بدء المراقبة التلقائية (كل ${intervalSeconds} ثانية)...`);
+  
+  isAutoSyncEnabled = true;
+  lastRowCount = await getSheetRowCount();
+  console.log(`✅ عدد الصفوف الحالي: ${lastRowCount}`);
+  
+  syncCheckInterval = setInterval(async () => {
+    try {
+      const currentRowCount = await getSheetRowCount();
+      
+      if (currentRowCount > lastRowCount) {
+        console.log(`📨 تم اكتشاف ${currentRowCount - lastRowCount} صفوف جديدة`);
+        lastRowCount = currentRowCount;
+        await mergeNewSheetData();
+      }
+    } catch (error) {
+      console.warn('❌ خطأ في فحص التحديثات:', error.message);
     }
-  }, interval * 1000);
+  }, intervalSeconds * 1000);
+  
+  console.log('✅ المراقبة التلقائية نشطة');
 }
 
-// ===== إيقاف المزامنة =====
+// ===== إيقاف المراقبة التلقائية =====
 function stopAutoSync() {
-  if (autoSyncTimer) {
-    clearInterval(autoSyncTimer);
-    autoSyncTimer = null;
-    console.log("⏹️ تم إيقاف المراقبة");
+  if (syncCheckInterval) {
+    clearInterval(syncCheckInterval);
+    syncCheckInterval = null;
+    isAutoSyncEnabled = false;
+    console.log('⏹️ تم إيقاف المراقبة التلقائية');
   }
 }
 
-// ===== ربط الأحداث مع Firebase =====
+// ===== Hooks للتطبيق =====
 window.gsheetHooks = {
   inventory: {
-    onAdd: (row) => postToSheet({ type: "inventory_add", timestamp: new Date().toLocaleString("ar-SA"), data: row }),
-    onUpdate: (id, changes) => postToSheet({ type: "inventory_update", id, changes, timestamp: new Date().toLocaleString("ar-SA") }),
-    onDelete: (id) => postToSheet({ type: "inventory_delete", id, timestamp: new Date().toLocaleString("ar-SA") })
+    onAdd: (row) => {
+      postToSheet({ 
+        type: 'inventory_add',
+        timestamp: new Date().toLocaleString('ar-SA'),
+        data: row 
+      });
+    },
+    onUpdate: (id, changes) => {
+      postToSheet({ 
+        type: 'inventory_update',
+        timestamp: new Date().toLocaleString('ar-SA'),
+        id,
+        changes 
+      });
+    },
+    onDelete: (id) => {
+      postToSheet({ 
+        type: 'inventory_delete',
+        timestamp: new Date().toLocaleString('ar-SA'),
+        id 
+      });
+    }
   },
   loans: {
-    onAdd: (row) => postToSheet({ type: "loan_add", timestamp: new Date().toLocaleString("ar-SA"), data: row }),
-    onDelete: (id) => postToSheet({ type: "loan_delete", id, timestamp: new Date().toLocaleString("ar-SA") })
+    onAdd: (row) => {
+      postToSheet({ 
+        type: 'loan_add',
+        timestamp: new Date().toLocaleString('ar-SA'),
+        data: row 
+      });
+    },
+    onDelete: (id) => {
+      postToSheet({ 
+        type: 'loan_delete',
+        timestamp: new Date().toLocaleString('ar-SA'),
+        id 
+      });
+    }
   },
   returns: {
-    onAdd: (row) => postToSheet({ type: "return_add", timestamp: new Date().toLocaleString("ar-SA"), data: row }),
-    onDelete: (id) => postToSheet({ type: "return_delete", id, timestamp: new Date().toLocaleString("ar-SA") })
+    onAdd: (row) => {
+      postToSheet({ 
+        type: 'return_add',
+        timestamp: new Date().toLocaleString('ar-SA'),
+        data: row 
+      });
+    },
+    onDelete: (id) => {
+      postToSheet({ 
+        type: 'return_delete',
+        timestamp: new Date().toLocaleString('ar-SA'),
+        id 
+      });
+    }
   }
 };
 
-// ===== تصدير الدوال =====
+// تصدير الدوال
 window.sheetSync = {
-  postToSheet,
   syncFromSheet,
   mergeNewSheetData,
+  postToSheet,
   startAutoSync,
   stopAutoSync,
-  getSheetRowCount
+  isAutoSyncEnabled: () => isAutoSyncEnabled
 };
 
-console.log("✅ Google Sheets Sync (CORS Safe Version) Ready");
+console.log('✅ Google Sheets Sync Initialized with Auto-Monitoring');
+
+
