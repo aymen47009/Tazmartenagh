@@ -1,5 +1,5 @@
 // === إعداد رابط Google Script ===
-const SHEET_API = "https://script.google.com/macros/s/AKfycbx05TgLh5QnIuWyms5VtVJ1rPC2awqP6plwuwUYSbVA-LlIlgPJ14XwqGnA_FFEKcbSHQ/exec";
+const SHEET_API = "https://script.google.com/macros/s/AKfycbxnbI_JZ1GEkFXD0gvj8gqpdoKQ9GIYZ9_cvWtAqUGdvP3HUgaleO8-0eL8ISDGlZxUSg/exec";
 
 // === عرض في الكونسول ===
 function log(...args) {
@@ -69,3 +69,4 @@ window.gsheet = {
 
 // === تجربة فورية عند التحميل ===
 log("✅ gsheets.js جاهز");
+
