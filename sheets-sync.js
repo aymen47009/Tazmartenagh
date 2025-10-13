@@ -110,69 +110,48 @@ function convertSheetRowToObject(row, headers) {
 
 // ===== دمج البيانات الجديدة من Google Sheets =====
 // ===== دمج البيانات الجديدة من Google Sheets =====
+const lastSyncedNumber = window.lastSyncedNumber || 0;
+
 async function mergeNewSheetData() {
-  if (typeof window.state === "undefined" || !window.state.inventory) {
-    console.warn("⚠️ state غير متاح أو فارغ");
-    return false;
-  }
-
-  if (!window.cloud) {
-    console.warn("⚠️ Firebase غير متصل");
-    return false;
-  }
-
-  console.log("🔄 فحص البيانات الجديدة من Google Sheets...");
+  if (!window.state?.inventory || !window.cloud) return false;
 
   const sheetData = await syncFromSheet("all");
-  if (!sheetData || !Array.isArray(sheetData.rows)) {
-    console.warn("⚠️ لم يتم العثور على صفوف صالحة في Google Sheets");
-    return false;
-  }
+  if (!sheetData?.rows) return false;
 
   let hasChanges = false;
-  let firebaseItems = window.state.inventory || [];
+  const firebaseItems = window.state.inventory;
 
   for (const row of sheetData.rows) {
-    // تخطي الصف الأول (العناوين)
     if (row[0] === "رقم" || row[0] === "number") continue;
 
+    const number = Number(row[0]);
+    if (number <= lastSyncedNumber) continue; // تخطي الصفوف القديمة
+
     const item = convertSheetRowToObject(row);
-    if (!item || !item.name) continue;
+    if (!item) continue;
 
-    // 🔍 تحقق إذا كان العنصر موجود فعلاً في قاعدة البيانات (بناءً على الاسم أو الرقم)
-    // 🔍 تحقق ذكي لتجنب التكرار حتى مع اختلاف بسيط في الاسم
-// 🧠 دالة لتوحيد النصوص (إزالة المسافات وتوحيد الحروف)
-const normalize = (val) => (val || '').toString().trim().toLowerCase().replace(/\s+/g, '');
+    const existing = firebaseItems.find(i => i.number === item.number);
 
-// ✅ تحقق من وجود صف مطابق تمامًا في قاعدة البيانات
-const exists = window.state?.inventory?.some(i => {
-  return (
-    normalize(i.name) === normalize(item.name) &&
-    Number(i.originalQty || i.initialQty || 0) === Number(item.originalQty || item.initialQty || 0) &&
-    Number(i.totalQty || 0) === Number(item.totalQty || 0) &&
-    Number(i.availableQty || 0) === Number(item.availableQty || 0) &&
-    normalize(i.notes) === normalize(item.notes)
-  );
-});
-
-
-    if (!exists) {
+    if (existing) {
+      // تحديث الصف إذا تغيرت القيم
+      const changed = ['name','notes','originalQty','totalQty','availableQty'].some(key => existing[key] !== item[key]);
+      if (changed) {
+        console.log(`✏️ تحديث العنصر في Firebase: ${item.name}`);
+        await window.cloud.updateInventory(existing.id, item);
+        hasChanges = true;
+      }
+    } else {
       console.log(`🆕 إضافة عنصر جديد إلى Firebase: ${item.name}`);
       await window.cloud.addInventory(item);
       hasChanges = true;
-    } else {
-      console.log(`↷ العنصر موجود مسبقًا: ${item.name}`);
     }
-  }
 
-  if (hasChanges) {
-    console.log("✅ تم دمج البيانات الجديدة بنجاح!");
-  } else {
-    console.log("ℹ️ جميع العناصر موجودة بالفعل، لا حاجة للإضافة.");
+    if (number > window.lastSyncedNumber) window.lastSyncedNumber = number;
   }
 
   return hasChanges;
 }
+
 
 
 // ===== المراقبة التلقائية للتغييرات =====
