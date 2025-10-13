@@ -141,11 +141,18 @@ async function mergeNewSheetData() {
 
     // 🔍 تحقق إذا كان العنصر موجود فعلاً في قاعدة البيانات (بناءً على الاسم أو الرقم)
     // 🔍 تحقق ذكي لتجنب التكرار حتى مع اختلاف بسيط في الاسم
-const normalize = (str) => str.toLowerCase().trim().replace(/\s+/g, '');
-const exists = firebaseItems.some((i) => {
-  const existingName = normalize(i.name || '');
-  const newName = normalize(item.name || '');
-  return existingName === newName || (i.number && i.number === item.number);
+// 🧠 دالة لتوحيد النصوص (إزالة المسافات وتوحيد الحروف)
+const normalize = (val) => (val || '').toString().trim().toLowerCase().replace(/\s+/g, '');
+
+// ✅ تحقق من وجود صف مطابق تمامًا في قاعدة البيانات
+const exists = window.state?.inventory?.some(i => {
+  return (
+    normalize(i.name) === normalize(item.name) &&
+    Number(i.originalQty || i.initialQty || 0) === Number(item.originalQty || item.initialQty || 0) &&
+    Number(i.totalQty || 0) === Number(item.totalQty || 0) &&
+    Number(i.availableQty || 0) === Number(item.availableQty || 0) &&
+    normalize(i.notes) === normalize(item.notes)
+  );
 });
 
 
