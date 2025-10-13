@@ -1,5 +1,5 @@
 // ===== إعداد رابط Google Apps Script Web App =====
-const SHEETS_URL = "https://script.google.com/macros/s/AKfycbyqCZ9_MEpoyoMTkdMKgLpOj2-6KRFcEqQm5IEii6FGJpEnHKPbOUI8fMrZeRL-b_Ztjw/exec";
+const SHEETS_URL = "https://script.google.com/macros/s/AKfycbz0sqe3_5rSiSVUZBAXpTYRK_snSyVvCQGYCHRNy4BIWmI54GqP6_qgNR2-HYLLC6cOcA/exec";
 
 // ===== دالة إرسال آمنة بدون خطأ CORS =====
 async function safeFetch(url, options = {}) {
