@@ -109,88 +109,61 @@ function convertSheetRowToObject(row, headers) {
 }
 
 // ===== دمج البيانات الجديدة من Google Sheets =====
+// ===== دمج البيانات الجديدة من Google Sheets =====
 async function mergeNewSheetData() {
-  // تحقق من توفر البيانات الأساسية
-  if (typeof window.state === 'undefined') {
-    console.warn('⚠️ state غير متاح');
+  if (typeof window.state === "undefined" || !window.state.inventory) {
+    console.warn("⚠️ state غير متاح أو فارغ");
     return false;
   }
-  
+
   if (!window.cloud) {
-    console.warn('⚠️ Firebase غير متصل');
+    console.warn("⚠️ Firebase غير متصل");
     return false;
   }
-  
-  console.log('🔄 فحص البيانات الجديدة من Google Sheets...');
-  
-  const sheetData = await syncFromSheet('all');
-  
-  if (!sheetData) {
-    console.warn('⚠️ لا يمكن الوصول إلى Google Sheets');
+
+  console.log("🔄 فحص البيانات الجديدة من Google Sheets...");
+
+  const sheetData = await syncFromSheet("all");
+  if (!sheetData || !Array.isArray(sheetData.rows)) {
+    console.warn("⚠️ لم يتم العثور على صفوف صالحة في Google Sheets");
     return false;
   }
-  
+
   let hasChanges = false;
-  
-  try {
-    // التحقق من أن البيانات مصفوفة من الصفوف
-    if (Array.isArray(sheetData.rows) && sheetData.rows.length > 0) {
-      console.log(`📊 تم العثور على ${sheetData.rows.length} صف في الجدول`);
-      
-      for (const row of sheetData.rows) {
-        // تخطي الصف الأول (العناوين)
-        if (row[0] === 'رقم' || row[0] === 'number') continue;
-        
-        // تحويل الصف إلى كائن
-        const item = convertSheetRowToObject(row);
-        
-        if (!item || !item.name) {
-          console.log('⚠️ تخطي صف غير صحيح');
-          continue;
-        }
-        
-        const itemKey = `inventory:${item.id}`;
-        
-        // التحقق من عدم تكرار العنصر
-        if (syncHistory.has(itemKey)) {
-          console.log(`↷ العنصر موجود بالفعل: ${item.name}`);
-          continue;
-        }
-        
-        // التحقق من عدم وجود العنصر في Firebase
-        const exists = window.state?.inventory?.some(i => 
-          i.name === item.name || i.id === item.id
-        );
-        
-        if (!exists) {
-          console.log(`➕ إضافة عنصر جديد: ${item.name} (الكمية: ${item.totalQty})`);
-          await window.cloud.addInventory(item);
-          syncHistory.add(itemKey);
-          hasChanges = true;
-        } else {
-          console.log(`🔄 تحديث العنصر: ${item.name}`);
-          // يمكن إضافة تحديث العنصر إذا كانت القيم مختلفة
-          syncHistory.add(itemKey);
-        }
-      }
+  let firebaseItems = window.state.inventory || [];
+
+  for (const row of sheetData.rows) {
+    // تخطي الصف الأول (العناوين)
+    if (row[0] === "رقم" || row[0] === "number") continue;
+
+    const item = convertSheetRowToObject(row);
+    if (!item || !item.name) continue;
+
+    // 🔍 تحقق إذا كان العنصر موجود فعلاً في قاعدة البيانات (بناءً على الاسم أو الرقم)
+    const exists = firebaseItems.some(
+      (i) =>
+        i.name.trim() === item.name.trim() ||
+        (i.number && i.number === item.number)
+    );
+
+    if (!exists) {
+      console.log(`🆕 إضافة عنصر جديد إلى Firebase: ${item.name}`);
+      await window.cloud.addInventory(item);
+      hasChanges = true;
     } else {
-      console.log('⚠️ لم يتم العثور على صفوف في البيانات');
-      console.log('البيانات المستقبلة:', sheetData);
+      console.log(`↷ العنصر موجود مسبقًا: ${item.name}`);
     }
-    
-    if (hasChanges) {
-      console.log('✅ تم دمج البيانات الجديدة بنجاح!');
-    } else {
-      console.log('ℹ️ جميع العناصر موجودة بالفعل أو لا توجد بيانات جديدة');
-    }
-    
-    return hasChanges;
-    
-  } catch (error) {
-    console.error('❌ خطأ في دمج البيانات:', error);
-    return false;
   }
+
+  if (hasChanges) {
+    console.log("✅ تم دمج البيانات الجديدة بنجاح!");
+  } else {
+    console.log("ℹ️ جميع العناصر موجودة بالفعل، لا حاجة للإضافة.");
+  }
+
+  return hasChanges;
 }
+
 
 // ===== المراقبة التلقائية للتغييرات =====
 async function startAutoSync(intervalSeconds = 15) {
