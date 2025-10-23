@@ -3,7 +3,6 @@ const ASSETS = [
   'index.html',
   'styles.css',
   'app.js',
-  'firebase.js',
   'manifest.webmanifest'
 ];
 

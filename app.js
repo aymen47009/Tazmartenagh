@@ -22,11 +22,32 @@ let useCloud = false; // toggled when Firebase is ready
 const uid = () => Math.random().toString(36).slice(2, 10);
 const todayStr = () => new Date().toISOString().slice(0,10);
 
+// Theme helpers
+const mediaDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : { matches: true, addEventListener: ()=>{} };
+function setDataTheme(mode){
+  const theme = mode === 'light' ? 'light' : mode === 'dark' ? 'dark' : (mediaDark.matches ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+}
+function applySavedTheme(){
+  const saved = localStorage.getItem('theme') || 'auto';
+  setDataTheme(saved);
+}
+function setTheme(mode){
+  localStorage.setItem('theme', mode);
+  setDataTheme(mode);
+}
+if (mediaDark && typeof mediaDark.addEventListener === 'function'){
+  mediaDark.addEventListener('change', ()=>{ if((localStorage.getItem('theme')||'auto')==='auto'){ setDataTheme('auto'); } });
+}
+
 function loadAll(){
   state.inventory = JSON.parse(localStorage.getItem(STORAGE_KEYS.INVENTORY) || '[]');
   state.loans = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOANS) || '[]');
   state.returns = JSON.parse(localStorage.getItem(STORAGE_KEYS.RETURNS) || '[]');
 }
+
+syncFromSheets(); // جلب البيانات من Google Sheets عند بدء التطبيق
+
 function save(key){
   if(key === STORAGE_KEYS.INVENTORY) localStorage.setItem(key, JSON.stringify(state.inventory));
   if(key === STORAGE_KEYS.LOANS) localStorage.setItem(key, JSON.stringify(state.loans));
@@ -151,7 +172,7 @@ function renderLoans(filter=''){
         <button class="btn danger" data-act="del">حذف</button>
       </div>`;
     el.querySelector('[data-act="del"]').onclick = ()=>{
-      if(useCloud && window.cloud){ window.cloud.deleteLoan(it.id); }
+      if(useCloud && window.cloud){ window.cloud.deleteLoan(it.id); if(window.gsheetHooks) window.gsheetHooks.loans.onDelete(it.id); }
       else {
         state.loans = state.loans.filter(x=>x.id!==it.id);
         save(STORAGE_KEYS.LOANS);
@@ -227,7 +248,7 @@ function renderReturns(filter=''){
         <button class="btn danger" data-act="del">حذف</button>
       </div>`;
     el.querySelector('[data-act="del"]').onclick = ()=>{
-      if(useCloud && window.cloud){ window.cloud.deleteReturn(it.id); }
+      if(useCloud && window.cloud){ window.cloud.deleteReturn(it.id); if(window.gsheetHooks) window.gsheetHooks.returns.onDelete(it.id); }
       else {
         state.returns = state.returns.filter(x=>x.id!==it.id);
         save(STORAGE_KEYS.RETURNS);
@@ -254,17 +275,30 @@ function renderReports(){
   for(const l of state.loans.filter(l=> l.due && l.due <= today && !isLoanFullyReturned(l))){
     const returnedQty = getReturnedQtyForLoan(l.id);
     const remainingQty = Number(l.qty) - returnedQty;
+    let daysLateStr = '';
+    try {
+      const dueDate = new Date(l.due + 'T00:00:00');
+      const now = new Date(today + 'T00:00:00');
+      const daysLate = Math.max(0, Math.round((now - dueDate) / (1000*60*60*24)));
+      daysLateStr = daysLate > 0 ? ` • متأخر ${daysLate} يوم` : '';
+    } catch {}
     const el = document.createElement('div');
     el.className='item';
     el.innerHTML = `
       <div>
         <div>${l.itemName} • ${l.qty} • ${l.person||''}</div>
-        <div class="meta">مُرجع: ${returnedQty}, متبقي: ${remainingQty}</div>
+        <div class="meta">مُرجع: ${returnedQty}, متبقي: ${remainingQty}${daysLateStr}</div>
       </div>
       <div class="meta">${l.due}</div>
       <div></div>`;
     dueList.appendChild(el);
   }
+  // In-use and damaged stats
+  const totalReturned = state.returns.reduce((s,r)=> s + Number(r.qty||0), 0);
+  const inUseEl = document.getElementById('stat_in_use');
+  if(inUseEl) inUseEl.textContent = Math.max(totalLoaned - totalReturned, 0);
+  const damagedEl = document.getElementById('stat_damaged');
+  if(damagedEl) damagedEl.textContent = state.returns.reduce((s,r)=> s + Number(r.damaged||0), 0);
 }
 
 function fillDatalists(){
@@ -293,7 +327,7 @@ function openItemDialog(id){
   if(typeof itemDialog.showModal === 'function') itemDialog.showModal();
 }
 
- // ===== في دالة submitItemDialog =====
+// استبدل الدالة القديمة بهذه:
 function submitItemDialog(ok){
   if(!ok){ itemDialog.close(); return; }
   const name = document.getElementById('f_name').value.trim();
@@ -301,36 +335,30 @@ function submitItemDialog(ok){
   const totalQty = Number(document.getElementById('f_totalQty').value||0);
   const notes = document.getElementById('f_notes').value.trim();
   if(!name) return;
+  
   const payload = { name, initialQty, totalQty, notes };
+  
   if(useCloud && window.cloud){
-    if(editingItemId){ 
+    if(editingItemId){
       window.cloud.updateInventory(editingItemId, payload);
-      // ✅ أضف هذا السطر
-      if(window.gsheetHooks?.inventory?.onUpdate) {
-        window.gsheetHooks.inventory.onUpdate(editingItemId, payload);
-      }
-    }
-    else { 
+      if(window.gsheetHooks) window.gsheetHooks.inventory.onUpdate(editingItemId, payload);
+    } else {
       window.cloud.addInventory(payload);
-      // ✅ أضف هذا السطر
-      if(window.gsheetHooks?.inventory?.onAdd) {
-        window.gsheetHooks.inventory.onAdd(payload);
-      }
+      if(window.gsheetHooks) window.gsheetHooks.inventory.onAdd(payload);
     }
   } else {
     if(editingItemId){
       const it = state.inventory.find(i=>i.id===editingItemId);
       if(!it) return; 
       Object.assign(it, payload);
-      // ✅ أضف هذا السطر
-      if(window.gsheetHooks?.inventory?.onUpdate) {
-        window.gsheetHooks.inventory.onUpdate(editingItemId, payload);
-      }
+      // تحديث في Google Sheets
+      if(window.gsheetHooks) window.gsheetHooks.inventory.onUpdate(editingItemId, payload);
     } else {
       const newItem = { id: uid(), ...payload };
       state.inventory.push(newItem);
-      // ✅ أضف هذا السطر
-      if(window.gsheetHooks?.inventory?.onAdd) {
+      // إرسال إلى Google Sheets مع جميع البيانات
+      if(window.gsheetHooks) {
+        console.log('📤 إرسال عتاد جديد:', newItem);
         window.gsheetHooks.inventory.onAdd(newItem);
       }
     }
@@ -341,122 +369,12 @@ function submitItemDialog(ok){
   itemDialog.close();
 }
 
-// ===== في دالة حذف العناصر =====
 function deleteEditingItem(){
   if(!editingItemId) return;
-  if(useCloud && window.cloud){ 
+  if(useCloud && window.cloud){
     window.cloud.deleteInventory(editingItemId);
-    // ✅ أضف هذا السطر
-    if(window.gsheetHooks?.inventory?.onDelete) {
-      window.gsheetHooks.inventory.onDelete(editingItemId);
-    }
+    if(window.gsheetHooks) window.gsheetHooks.inventory.onDelete(editingItemId);
   }
-  else {
-    state.inventory = state.inventory.filter(i=>i.id!==editingItemId);
-    // ✅ أضف هذا السطر
-    if(window.gsheetHooks?.inventory?.onDelete) {
-      window.gsheetHooks.inventory.onDelete(editingItemId);
-    }
-    save(STORAGE_KEYS.INVENTORY);
-    renderInventory(document.getElementById('inventorySearch').value||'');
-  }
-  itemDialog.close();
-}
-
-// ===== في معالج نموذج الإعارات =====
-document.getElementById('loanForm').addEventListener('submit', (e)=>{
-  e.preventDefault();
-  const rec = {
-    id: uid(),
-    itemName: document.getElementById('loan_item').value.trim(),
-    qty: Number(document.getElementById('loan_qty').value||0),
-    person: document.getElementById('loan_person').value.trim(),
-    phone: document.getElementById('loan_phone').value.trim(),
-    dept: document.getElementById('loan_dept').value.trim(),
-    date: document.getElementById('loan_date').value,
-    due: document.getElementById('loan_due').value,
-    returnedQty: 0
-  };
-  if(!rec.itemName || rec.qty<=0) return;
-  if(getAvailableFor(rec.itemName) - rec.qty < 0){ alert('الكمية غير متاحة'); return; }
-  
-  if(useCloud && window.cloud){ 
-    const { id, ...doc } = rec; 
-    window.cloud.addLoan(doc);
-    // ✅ أضف هذا السطر
-    if(window.gsheetHooks?.loans?.onAdd) {
-      window.gsheetHooks.loans.onAdd(rec);
-    }
-  }
-  else {
-    state.loans.push(rec); 
-    // ✅ أضف هذا السطر
-    if(window.gsheetHooks?.loans?.onAdd) {
-      window.gsheetHooks.loans.onAdd(rec);
-    }
-    save(STORAGE_KEYS.LOANS);
-    renderLoans(document.getElementById('loanSearch').value||'');
-    renderInventory(document.getElementById('inventorySearch').value||'');
-    renderReports();
-  }
-  (e.target).reset(); 
-  document.getElementById('loan_date').value = todayStr();
-});
-
-// ===== في معالج نموذج الإرجاعات =====
-document.getElementById('returnForm').addEventListener('submit', (e)=>{
-  e.preventDefault();
-  const loanId = document.getElementById('ret_loanId').value;
-  const rec = {
-    id: uid(),
-    date: document.getElementById('ret_date').value,
-    itemName: document.getElementById('ret_item').value.trim(),
-    qty: Number(document.getElementById('ret_qty').value||0),
-    damaged: Number(document.getElementById('ret_damaged').value||0),
-    notes: document.getElementById('ret_notes').value.trim(),
-    loanId: loanId || null
-  };
-  if(!rec.itemName) return;
-  
-  if(loanId) {
-    const loan = state.loans.find(l => l.id === loanId);
-    if(loan) {
-      const alreadyReturned = getReturnedQtyForLoan(loanId);
-      const maxReturnable = Number(loan.qty) - alreadyReturned;
-      if(rec.qty > maxReturnable) {
-        alert(`لا يمكن إرجاع أكثر من ${maxReturnable} (المتبقي من السلفية)`);
-        return;
-      }
-    }
-  }
-  
-  if(useCloud && window.cloud){ 
-    const { id, ...doc } = rec; 
-    window.cloud.addReturn(doc);
-    // ✅ أضف هذا السطر
-    if(window.gsheetHooks?.returns?.onAdd) {
-      window.gsheetHooks.returns.onAdd(rec);
-    }
-  }
-  else {
-    state.returns.push(rec);
-    // ✅ أضف هذا السطر
-    if(window.gsheetHooks?.returns?.onAdd) {
-      window.gsheetHooks.returns.onAdd(rec);
-    }
-    save(STORAGE_KEYS.RETURNS);
-    renderReturns(document.getElementById('returnSearch').value||'');
-    renderLoans(document.getElementById('loanSearch').value||'');
-    renderInventory(document.getElementById('inventorySearch').value||'');
-    renderReports();
-  }
-  (e.target).reset(); 
-  document.getElementById('ret_date').value = todayStr(); 
-  document.getElementById('ret_damaged').value = 0;
-});
-function deleteEditingItem(){
-  if(!editingItemId) return;
-  if(useCloud && window.cloud){ window.cloud.deleteInventory(editingItemId); }
   else {
     state.inventory = state.inventory.filter(i=>i.id!==editingItemId);
     save(STORAGE_KEYS.INVENTORY);
@@ -540,9 +458,57 @@ function stopScan(){
   scanRAF=null; scanStream=null;
 }
 
+
+// ✅ ربط تطبيقك بمزامنة Google Sheets إذا كانت مفعلة
+if (window.gsheetHooks) {
+  cloud.addInventory = async (item) => {
+    await push(ref(db, 'inventory'), item);
+    window.gsheetHooks.inventory.onAdd(item);
+  };
+
+  cloud.updateInventory = async (id, changes) => {
+    await update(ref(db, `inventory/${id}`), changes);
+    window.gsheetHooks.inventory.onUpdate(id, changes);
+  };
+
+  cloud.deleteInventory = async (id) => {
+    await remove(ref(db, `inventory/${id}`));
+    window.gsheetHooks.inventory.onDelete(id);
+  };
+
+  cloud.addLoan = async (rec) => {
+    await push(ref(db, 'loans'), rec);
+    window.gsheetHooks.loans.onAdd(rec);
+  };
+
+  cloud.deleteLoan = async (id) => {
+    await remove(ref(db, `loans/${id}`));
+    window.gsheetHooks.loans.onDelete(id);
+  };
+
+  cloud.addReturn = async (rec) => {
+    await push(ref(db, 'returns'), rec);
+    window.gsheetHooks.returns.onAdd(rec);
+  };
+
+  cloud.deleteReturn = async (id) => {
+    await remove(ref(db, `returns/${id}`));
+    window.gsheetHooks.returns.onDelete(id);
+  };
+}
+
+
+
 // Event wiring
 function init(){
   loadAll();
+  // Theme select wiring
+  applySavedTheme();
+  const themeSelect = document.getElementById('themeSelect');
+  if(themeSelect){
+    themeSelect.value = localStorage.getItem('theme') || 'auto';
+    themeSelect.onchange = ()=> setTheme(themeSelect.value);
+  }
   const logged = isLoggedIn();
   document.getElementById('view-login').classList.toggle('hidden', logged);
   document.getElementById('view-shell').classList.toggle('hidden', !logged);
@@ -641,9 +607,9 @@ function init(){
     if(!rec.itemName || rec.qty<=0) return;
     // Prevent negative available
     if(getAvailableFor(rec.itemName) - rec.qty < 0){ alert('الكمية غير متاحة'); return; }
-    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addLoan(doc); if(window.gsheetHooks?.loans?.onAdd) window.gsheetHooks.loans.onAdd(rec); }
+    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addLoan(doc); if(window.gsheetHooks) window.gsheetHooks.loans.onAdd(doc); }
     else {
-      state.loans.push(rec); save(STORAGE_KEYS.LOANS); if(window.gsheetHooks?.loans?.onAdd) window.gsheetHooks.loans.onAdd(rec);
+      state.loans.push(rec); save(STORAGE_KEYS.LOANS);
       renderLoans(document.getElementById('loanSearch').value||'');
       renderInventory(document.getElementById('inventorySearch').value||'');
       renderReports();
@@ -688,9 +654,9 @@ function init(){
       }
     }
     
-    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addReturn(doc); if(window.gsheetHooks?.returns?.onAdd) window.gsheetHooks.returns.onAdd(rec); }
+    if(useCloud && window.cloud){ const { id, ...doc } = rec; window.cloud.addReturn(doc); if(window.gsheetHooks) window.gsheetHooks.returns.onAdd(doc); }
     else {
-      state.returns.push(rec); save(STORAGE_KEYS.RETURNS); if(window.gsheetHooks?.returns?.onAdd) window.gsheetHooks.returns.onAdd(rec);
+      state.returns.push(rec); save(STORAGE_KEYS.RETURNS);
       renderReturns(document.getElementById('returnSearch').value||'');
       renderLoans(document.getElementById('loanSearch').value||''); // Refresh loans to show updated status
       renderInventory(document.getElementById('inventorySearch').value||'');
@@ -729,65 +695,8 @@ function init(){
     }
     if(tries>=maxTries) clearInterval(t);
   }, 100);
-
-  // ===== بدء المراقبة التلقائية للتغييرات =====
-  let autoSyncCheckCount = 0;
-  const autoSyncCheckInterval = setInterval(() => {
-    autoSyncCheckCount++;
-    
-    // تحقق من Firebase والـ Sheet Sync
-    if (window.cloud && window.sheetSync && useCloud) {
-      clearInterval(autoSyncCheckInterval);
-      
-      try {
-        // بدء المراقبة التلقائية (كل 15 ثانية)
-        window.sheetSync.startAutoSync(15);
-        console.log('✅ تم تشغيل المراقبة التلقائية');
-        
-        // أضف زر التحكم في المراقبة
-        setTimeout(() => {
-          const controlPanel = document.querySelector('.top-actions');
-          if (controlPanel && !document.getElementById('syncControlBtn')) {
-            const syncControlBtn = document.createElement('button');
-            syncControlBtn.id = 'syncControlBtn';
-            syncControlBtn.className = 'btn secondary';
-            syncControlBtn.textContent = '⏸️ إيقاف المراقبة';
-            syncControlBtn.style.marginLeft = '8px';
-            
-            let isSyncRunning = true;
-            
-            syncControlBtn.onclick = () => {
-              if (isSyncRunning) {
-                window.sheetSync?.stopAutoSync();
-                syncControlBtn.textContent = '▶️ تشغيل المراقبة';
-                console.log('تم إيقاف المراقبة');
-              } else {
-                window.sheetSync?.startAutoSync(15);
-                syncControlBtn.textContent = '⏸️ إيقاف المراقبة';
-                console.log('تم تشغيل المراقبة');
-              }
-              isSyncRunning = !isSyncRunning;
-            };
-            
-            controlPanel.insertBefore(syncControlBtn, controlPanel.firstChild);
-          }
-        }, 500);
-        
-      } catch (error) {
-        console.error('خطأ في تشغيل المراقبة:', error);
-      }
-    } 
-    
-    // توقف بعد 15 ثانية من المحاولة
-    if (autoSyncCheckCount > 150) {
-      clearInterval(autoSyncCheckInterval);
-      console.warn('⚠️ لم يتمكن من تشغيل المراقبة التلقائية');
-    }
-  }, 100);
 }
 
 window.addEventListener('DOMContentLoaded', init);
-// 🧠 حالة التطبيق العامة
-window.state = {
-  inventory: []
-};
+
+

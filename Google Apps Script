@@ -1,0 +1,175 @@
+// Google Apps Script - إدارة المخزون الطبي
+// ضع معرف الجدول هنا
+const SPREADSHEET_ID = "1OFfqzwNijrf0SsMSeFeSMGgqm-lhrBjOPVbkCEX82GA";
+
+// معالج الطلبات POST
+function doPost(e) {
+  try {
+    Logger.log("📥 استقبال طلب POST");
+    
+    // قراءة البيانات المرسلة
+    const payload = JSON.parse(e.postData.contents);
+    Logger.log("البيانات المستقبلة: " + JSON.stringify(payload));
+    
+    // فتح الجدول
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    if (!spreadsheet) {
+      throw new Error("لم يتم العثور على الجدول");
+    }
+    
+    // الحصول على أول sheet
+    const sheets = spreadsheet.getSheets();
+    if (!sheets || sheets.length === 0) {
+      throw new Error("لا توجد sheets في الجدول");
+    }
+    
+    const sheet = sheets[0];
+    Logger.log("اسم الـ Sheet: " + sheet.getName());
+    
+    // الجدول موجود بالفعل - فقط أضف البيانات الجديدة
+    
+    // معالجة حسب نوع العملية
+    const timestamp = new Date().toLocaleString("ar-SA");
+    let dataToLog = "";
+    
+    if (payload.type === 'inventory_add') {
+      dataToLog = `إضافة عتاد: ${payload.data.name || 'N/A'} - الكمية: ${payload.data.totalQty || 0}`;
+    } else if (payload.type === 'inventory_update') {
+      dataToLog = `تحديث عتاد: ${payload.changes.name || 'N/A'} - الكمية: ${payload.changes.totalQty || 'N/A'}`;
+    } else if (payload.type === 'inventory_delete') {
+      dataToLog = `حذف عتاد برقم: ${payload.id || 'N/A'}`;
+    } else if (payload.type === 'loan_add') {
+      dataToLog = `قرض جديد: ${payload.data.itemName || 'N/A'} - الكمية: ${payload.data.qty || 0} - المستلم: ${payload.data.person || 'N/A'}`;
+    } else if (payload.type === 'loan_delete') {
+      dataToLog = `حذف قرض برقم: ${payload.id || 'N/A'}`;
+    } else if (payload.type === 'return_add') {
+      dataToLog = `إرجاع: ${payload.data.itemName || 'N/A'} - الكمية: ${payload.data.qty || 0} - التالفة: ${payload.data.damaged || 0}`;
+    } else if (payload.type === 'return_delete') {
+      dataToLog = `حذف إرجاع برقم: ${payload.id || 'N/A'}`;
+    } else {
+      dataToLog = `عملية: ${payload.type || 'unknown'}`;
+    }
+    
+    // إضافة الصف الجديد في نهاية الجدول
+    sheet.appendRow([
+      timestamp,
+      payload.type || "-",
+      payload.id || payload.data?.id || "-",
+      dataToLog,
+      "", // عمود فارغ إذا لزم الأمر
+      ""  // عمود فارغ آخر
+    ]);
+    
+    Logger.log(`✅ تم حفظ: ${dataToLog}`);
+    
+    // الرد بنجاح
+    return ContentService
+      .createTextOutput(JSON.stringify({
+        status: "success",
+        message: "تم حفظ البيانات بنجاح ✅",
+        type: payload.type,
+        timestamp: timestamp
+      }))
+      .setMimeType(ContentService.MimeType.JSON);
+      
+  } catch (error) {
+    Logger.log(`❌ خطأ: ${error.message}`);
+    Logger.log("Stack: " + error.stack);
+    
+    return ContentService
+      .createTextOutput(JSON.stringify({
+        status: "error",
+        message: error.message,
+        timestamp: new Date().toLocaleString("ar-SA")
+      }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// معالج الطلبات GET
+function doGet(e) {
+  try {
+    return ContentService
+      .createTextOutput(JSON.stringify({
+        status: "ok",
+        message: "خادم إدارة المخزون يعمل بنجاح ✅",
+        timestamp: new Date().toLocaleString("ar-SA")
+      }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService
+      .createTextOutput(JSON.stringify({
+        status: "error",
+        message: error.message
+      }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// دالة اختبار (تشغيل من وحدة التحرير)
+function testDeployment() {
+  Logger.log("🧪 بدء الاختبار...");
+  
+  const testPayload = {
+    type: "inventory_add",
+    timestamp: new Date().toLocaleString("ar-SA"),
+    data: {
+      id: "test123",
+      name: "عتاد اختبار",
+      totalQty: 10
+    }
+  };
+  
+  Logger.log("البيانات المرسلة: " + JSON.stringify(testPayload));
+  
+  // محاكاة الطلب
+  const e = {
+    postData: {
+      contents: JSON.stringify(testPayload)
+    }
+  };
+  
+  const result = doPost(e);
+  Logger.log("✅ نتيجة الاختبار:");
+  Logger.log(result.getContent());
+}
+
+// دالة الحصول على البيانات الحالية
+function getSheetData() {
+  try {
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = spreadsheet.getSheets()[0];
+    
+    const data = sheet.getDataRange().getValues();
+    Logger.log(`عدد الصفوف: ${data.length}`);
+    
+    if (data.length > 0) {
+      Logger.log("آخر 5 صفوف:");
+      for (let i = Math.max(0, data.length - 5); i < data.length; i++) {
+        Logger.log(data[i].join(" | "));
+      }
+    }
+    
+    return data;
+  } catch (error) {
+    Logger.log(`❌ خطأ في جلب البيانات: ${error.message}`);
+  }
+}
+
+// دالة معلومات الجدول
+function getSpreadsheetInfo() {
+  try {
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheets = spreadsheet.getSheets();
+    
+    Logger.log("معلومات الجدول:");
+    Logger.log("عدد الـ Sheets: " + sheets.length);
+    
+    for (let i = 0; i < sheets.length; i++) {
+      const sheet = sheets[i];
+      Logger.log(`${i + 1}. ${sheet.getName()} - صفوف: ${sheet.getLastRow()}`);
+    }
+  } catch (error) {
+    Logger.log(`❌ خطأ: ${error.message}`);
+  }
+}
