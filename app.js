@@ -389,17 +389,17 @@ async function showItemQr(it){
   const status = document.getElementById('qrStatus');
   status.textContent = '';
   
-  // Wait for QRCode library to load (max 3 seconds)
+  // Wait for QR library or wrapper to load (max 3 seconds)
   let attempts = 0;
-  while (!window.QRCode && attempts < 30) {
+  while ((!window.QRCode && !window.generateQRCode) && attempts < 30) {
     await new Promise(resolve => setTimeout(resolve, 100));
     attempts++;
   }
   
-  console.log('QRCode available:', !!window.QRCode, 'after', attempts * 100, 'ms');
-  if(!window.QRCode){ 
+  console.log('QRCode available:', !!(window.QRCode || window.generateQRCode), 'after', attempts * 100, 'ms');
+  if(!window.QRCode && !window.generateQRCode){ 
     status.textContent = 'مكتبة QR غير محملة - تأكد من الاتصال بالإنترنت'; 
-    console.error('QRCode library not loaded after timeout');
+    console.error('QR library not loaded after timeout');
     return; 
   }
   
@@ -410,25 +410,38 @@ async function showItemQr(it){
   el.innerHTML='';
   status.textContent = 'جاري توليد الرمز...';
   
-  // Use callback-based toCanvas (more reliable)
+  // Generate QR using compatibility wrapper if available
   const canvas = document.createElement('canvas');
-  window.QRCode.toCanvas(canvas, payload, { 
-    width: 220, 
-    margin: 1,
-    color: {
-      dark: '#000000',
-      light: '#FFFFFF'
-    }
-  }, function (error) {
+  const options = { width: 220, margin: 1, color: { dark: '#000000', light: '#FFFFFF' } };
+  const cb = function (error) {
     if (error) {
       console.error('QR generation failed:', error);
-      status.textContent = 'فشل توليد رمز QR: ' + error.message;
+      status.textContent = 'فشل توليد رمز QR: ' + (error.message || error);
     } else {
       console.log('QR generated successfully');
       el.appendChild(canvas);
       status.textContent = 'تم توليد الرمز بنجاح';
     }
-  });
+  };
+
+  if (typeof window.generateQRCode === 'function') {
+    window.generateQRCode(canvas, payload, options, cb);
+  } else if (window.QRCode && typeof window.QRCode.toCanvas === 'function') {
+    window.QRCode.toCanvas(canvas, payload, options, cb);
+  } else {
+    // final fallback
+    try {
+      const ctx = canvas.getContext('2d');
+      canvas.width = 220; canvas.height = 220;
+      ctx.fillStyle = '#000'; ctx.fillRect(0,0,220,220);
+      ctx.fillStyle = '#fff'; ctx.font = '12px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('QR: ' + payload.substring(0,20), 110, 110);
+      el.appendChild(canvas);
+      status.textContent = 'تم توليد رمز نصي احتياطي';
+    } catch (e) {
+      status.textContent = 'فشل توليد رمز QR';
+    }
+  }
 }
 
 let scanRAF=null, scanStream=null;

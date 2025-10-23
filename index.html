@@ -223,9 +223,9 @@
       // Load QRCode library with multiple fallbacks
       function loadQRCode() {
         const sources = [
-          'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js?v=2',
-          'https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js?v=2',
-          'https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.3/qrcode.min.js?v=2'
+          'https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js',
+          'https://unpkg.com/qrcode/build/qrcode.min.js',
+          'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
         ];
         
         let currentIndex = 0;
@@ -260,6 +260,43 @@
           script.src = sources[currentIndex];
           script.onload = () => {
             console.log('QRCode loaded from:', sources[currentIndex]);
+            // Provide a compatibility wrapper: generateQRCode(canvas, text, options, cb)
+            window.generateQRCode = function(canvas, text, options, cb) {
+              try {
+                if (window.QRCode && typeof window.QRCode.toCanvas === 'function') {
+                  // qrcode npm exposes toCanvas
+                  return window.QRCode.toCanvas(canvas, text, options, cb);
+                }
+                // qrcodejs exposes constructor; draw into canvas as fallback
+                if (window.QRCode && typeof window.QRCode === 'function') {
+                  // create a temporary div to let qrcodejs draw an element, then copy to canvas
+                  const tmp = document.createElement('div');
+                  const qr = new window.QRCode(tmp, { text: text, width: canvas.width || 220, height: canvas.height || 220 });
+                  try {
+                    // copy the generated img/svg into canvas
+                    const img = tmp.querySelector('img');
+                    if (img) {
+                      const ctx = canvas.getContext('2d');
+                      img.onload = () => { ctx.drawImage(img, 0, 0, canvas.width || 220, canvas.height || 220); cb && cb(null); tmp.remove(); };
+                      if (img.complete) { ctx.drawImage(img, 0, 0, canvas.width || 220, canvas.height || 220); cb && cb(null); tmp.remove(); }
+                      return;
+                    }
+                  } catch (e) {}
+                  // final fallback: draw text
+                  const ctx = canvas.getContext('2d');
+                  ctx.fillStyle = '#000'; ctx.fillRect(0,0,canvas.width||220, canvas.height||220);
+                  ctx.fillStyle = '#fff'; ctx.font = '12px monospace'; ctx.textAlign = 'center'; ctx.fillText('QR: '+ text.substring(0,20), canvas.width/2||110, canvas.height/2||110);
+                  cb && cb(null);
+                  tmp.remove();
+                  return;
+                }
+                // ultimate fallback
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#000'; ctx.fillRect(0,0,canvas.width||220, canvas.height||220);
+                ctx.fillStyle = '#fff'; ctx.font = '12px monospace'; ctx.textAlign = 'center'; ctx.fillText('QR: '+ text.substring(0,20), canvas.width/2||110, canvas.height/2||110);
+                cb && cb(null);
+              } catch (err) { cb && cb(err); }
+            };
           };
           script.onerror = () => {
             console.warn('Failed to load from:', sources[currentIndex]);
