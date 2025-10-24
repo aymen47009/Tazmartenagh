@@ -111,16 +111,74 @@ window.sheetsDebug = {
     }
 };
 
-// إضافة زر للفحص في واجهة المستخدم
-window.addEventListener('DOMContentLoaded', () => {
+// إضافة زر للفحص في واجهة المستخدم وإدارة حالته
+window.initGSheetsDebugButton = () => {
+    // إزالة الزر القديم إذا وجد
+    const existingButton = document.getElementById('gsheets-debug-btn');
+    if (existingButton) {
+        existingButton.remove();
+    }
+
+    // إنشاء الزر الجديد
     const button = document.createElement('button');
+    button.id = 'gsheets-debug-btn';
     button.className = 'btn secondary';
-    button.textContent = 'فحص Google Sheets';
-    button.onclick = () => window.sheetsDebug.runAllChecks();
+    button.textContent = 'حالة Google Sheets';
+    button.onclick = () => {
+        window.sheetsDebug.runAllChecks().then(() => {
+            // تحديث حالة الزر بعد الفحص
+            updateButtonStatus();
+        });
+    };
     
-    // إضافة الزر في شريط الأدوات
-    const toolbar = document.querySelector('.top-actions');
-    if (toolbar) {
-        toolbar.insertBefore(button, toolbar.firstChild);
+    // دالة تحديث حالة الزر
+    function updateButtonStatus() {
+        if (window.cloud && window.sheetSync) {
+            button.classList.remove('danger');
+            button.classList.add('success');
+            button.textContent = '✓ متصل بـ Google Sheets';
+        } else {
+            button.classList.remove('success');
+            button.classList.add('danger');
+            button.textContent = '× غير متصل بـ Google Sheets';
+        }
+    }
+
+    // إضافة الزر في المكان المناسب
+    if (document.getElementById('view-shell') && document.getElementById('view-shell').classList.contains('hidden')) {
+        // إذا لم يكن المستخدم مسجل الدخول، أضف الزر في منطقة تسجيل الدخول
+        const loginForm = document.getElementById('loginForm');
+        if (loginForm) {
+            const container = document.createElement('div');
+            container.className = 'login-status';
+            container.style.textAlign = 'center';
+            container.style.marginTop = '10px';
+            container.appendChild(button);
+            loginForm.parentNode.insertBefore(container, loginForm.nextSibling);
+        }
+    } else {
+        // إذا كان المستخدم مسجل الدخول، أضف الزر في شريط الأدوات
+        const toolbar = document.querySelector('.top-actions');
+        if (toolbar) {
+            toolbar.insertBefore(button, toolbar.firstChild);
+        }
+    }
+
+    // تحديث حالة الزر مباشرة
+    updateButtonStatus();
+
+    // إعادة تحديث حالة الزر كل 30 ثانية
+    setInterval(updateButtonStatus, 30000);
+};
+
+// استدعاء الدالة عند تحميل الصفحة
+window.addEventListener('DOMContentLoaded', () => {
+    window.initGSheetsDebugButton();
+});
+
+// إضافة مراقب لتغيير حالة تسجيل الدخول
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        window.initGSheetsDebugButton();
     }
 });

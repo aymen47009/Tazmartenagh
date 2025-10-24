@@ -542,15 +542,26 @@ function init(){
   document.getElementById('logoutBtn').hidden = !logged;
 
   // Login
-  document.getElementById('loginForm').addEventListener('submit', (e)=>{
+  document.getElementById('loginForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const code = document.getElementById('loginCode').value.trim();
     if(code === (JSON.parse(localStorage.getItem(STORAGE_KEYS.SETTINGS)||'{}').loginCode || DEFAULT_LOGIN_CODE)){
       setLoggedIn(true);
-      init();
+      await init();
+      // تحديث زر Google Sheets بعد تسجيل الدخول
+      if (window.initGSheetsDebugButton) {
+        window.initGSheetsDebugButton();
+      }
     } else alert('رمز غير صحيح');
   });
-  document.getElementById('logoutBtn').onclick = ()=>{ setLoggedIn(false); init(); };
+  document.getElementById('logoutBtn').onclick = async ()=>{ 
+    setLoggedIn(false); 
+    await init();
+    // تحديث زر Google Sheets بعد تسجيل الخروج
+    if (window.initGSheetsDebugButton) {
+      window.initGSheetsDebugButton();
+    }
+  };
 
   // Tabs
   document.querySelectorAll('.tabs .tab').forEach(b=> b.onclick = ()=> goto(b.dataset.route));
