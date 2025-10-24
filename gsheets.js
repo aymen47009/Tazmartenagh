@@ -67,18 +67,19 @@ async function syncFromSheet(dataType = 'all') {
     const result = await response.json();
     console.log('✅ تم استرجاع البيانات من Google Sheets');
     
-    // تحويل البيانات إلى الشكل المطلوب للتطبيق
-    if (result.data || result) {
-      const rawData = result.data || result;
-      
-      // تأكد من أن البيانات مصفوفات
-      const data = {
-        inventory: Array.isArray(rawData.inventory) ? rawData.inventory : [],
-        loans: Array.isArray(rawData.loans) ? rawData.loans : [],
-        returns: Array.isArray(rawData.returns) ? rawData.returns : []
-      };
-
-      // تحويل البيانات
+      // تحويل البيانات إلى الشكل المطلوب للتطبيق
+      if (result.data || result) {
+        const rawData = result.data || result;
+        
+        // تهيئة البيانات كمصفوفات وتصفية العناصر غير الصالحة
+        const data = {
+          inventory: Array.isArray(rawData.inventory) ? 
+            rawData.inventory.filter(item => item && typeof item === 'object') : [],
+          loans: Array.isArray(rawData.loans) ? 
+            rawData.loans.filter(item => item && typeof item === 'object') : [],
+          returns: Array.isArray(rawData.returns) ? 
+            rawData.returns.filter(item => item && typeof item === 'object') : []
+        };      // تحويل البيانات
       try {
         console.log('📝 تحويل بيانات المخزون...');
         data.inventory = window.sheetsTransform.transformInventory(data.inventory);
@@ -347,22 +348,59 @@ console.log('✅ Google Sheets Sync Initialized with Auto-Monitoring');
 
   function notify(kind, rows) {
     try {
-      const list = Array.isArray(rows) ? rows : [];
+      // تأكد من أن البيانات مصفوفة صحيحة
+      let list;
+      if (Array.isArray(rows)) {
+        list = rows.filter(item => item && typeof item === 'object');
+      } else {
+        console.warn(`⚠️ البيانات الواردة لـ ${kind} ليست مصفوفة`);
+        list = [];
+      }
+
+      // التأكد من تحديث state قبل استدعاء المشتركين
+      if (window.state && typeof window.state === 'object') {
+        window.state[kind] = list;
+      }
+
       subscribers[kind].forEach(cb => {
-        try { cb(list); } catch (e) { console.warn('subscriber callback error', e); }
+        try { 
+          cb(list); 
+        } catch (e) { 
+          console.warn(`خطأ في معالج ${kind}:`, e); 
+        }
       });
-    } catch (e) { console.warn('notify error', e); }
+    } catch (e) { 
+      console.warn('خطأ في إخطار المشتركين:', e); 
+    }
   }
 
   async function pollOnce() {
     try {
       const data = await syncFromSheet('all');
-      if (!data) return;
-      if (Array.isArray(data.inventory)) notify('inventory', data.inventory);
-      if (Array.isArray(data.loans)) notify('loans', data.loans);
-      if (Array.isArray(data.returns)) notify('returns', data.returns);
+      if (!data) {
+        console.warn('❌ لم يتم استلام بيانات من Google Sheets');
+        return;
+      }
+
+      // تهيئة المصفوفات إذا كانت غير موجودة
+      if (!window.state) window.state = {};
+      if (!Array.isArray(window.state.inventory)) window.state.inventory = [];
+      if (!Array.isArray(window.state.loans)) window.state.loans = [];
+      if (!Array.isArray(window.state.returns)) window.state.returns = [];
+
+      // معالجة البيانات وإخطار المشتركين
+      notify('inventory', Array.isArray(data.inventory) ? data.inventory : []);
+      notify('loans', Array.isArray(data.loans) ? data.loans : []);
+      notify('returns', Array.isArray(data.returns) ? data.returns : []);
+
     } catch (e) {
-      console.warn('pollOnce failed', e.message || e);
+      console.error('❌ فشل في تحديث البيانات:', e);
+      // إعادة تهيئة المصفوفات في حالة الخطأ
+      if (window.state) {
+        window.state.inventory = window.state.inventory || [];
+        window.state.loans = window.state.loans || [];
+        window.state.returns = window.state.returns || [];
+      }
     }
   }
 

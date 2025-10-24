@@ -41,6 +41,9 @@ if (mediaDark && typeof mediaDark.addEventListener === 'function'){
 }
 
 async function loadAll(){
+  // تأكد من تهيئة الحالة
+  if (typeof state !== 'object') state = {};
+  
   // تهيئة الحالة بمصفوفات فارغة
   state.inventory = [];
   state.loans = [];
@@ -48,11 +51,25 @@ async function loadAll(){
 
   // محاولة تحميل البيانات المحلية
   try {
-    state.inventory = JSON.parse(localStorage.getItem(STORAGE_KEYS.INVENTORY) || '[]');
-    state.loans = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOANS) || '[]');
-    state.returns = JSON.parse(localStorage.getItem(STORAGE_KEYS.RETURNS) || '[]');
+    // تحميل وتصفية البيانات المحلية
+    const loadAndFilter = (key) => {
+      try {
+        const data = JSON.parse(localStorage.getItem(key) || '[]');
+        return Array.isArray(data) ? data.filter(item => item && typeof item === 'object') : [];
+      } catch {
+        return [];
+      }
+    };
+
+    state.inventory = loadAndFilter(STORAGE_KEYS.INVENTORY);
+    state.loans = loadAndFilter(STORAGE_KEYS.LOANS);
+    state.returns = loadAndFilter(STORAGE_KEYS.RETURNS);
   } catch (error) {
     console.warn('⚠️ خطأ في تحميل البيانات المحلية:', error);
+    // إعادة تهيئة المصفوفات في حالة الخطأ
+    state.inventory = [];
+    state.loans = [];
+    state.returns = [];
   }
 
   // تأكد من أن جميع المتغيرات مصفوفات
