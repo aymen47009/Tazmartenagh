@@ -22,19 +22,25 @@
   }
 
   // وظائف المساعدة
-  // دالة fetch حديثة للتواصل مع Google Sheets
+  // دالة fetch تستخدم GET لتجنب مشاكل CORS preflight
   async function fetchFromSheet(payload, maxRetries = 3) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const response = await fetch(state.SHEETS_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(payload)
+        // تحويل البيانات إلى معاملات URL
+        const params = new URLSearchParams();
+        Object.entries(payload).forEach(([key, value]) => {
+          params.append(key, typeof value === 'string' ? value : JSON.stringify(value));
         });
+        
+        const url = `${state.SHEETS_URL}?${params.toString()}`;
+        const response = await fetch(url, {
+          method: "GET",
+          redirect: "follow"
+        });
+        
         if (!response.ok) throw new Error("Network error");
-        return await response.json();
+        const text = await response.text();
+        return JSON.parse(text);
       } catch (error) {
         console.warn(`⚠️ محاولة ${attempt}/${maxRetries} فشلت:`, error);
         if (attempt === maxRetries) throw error;
