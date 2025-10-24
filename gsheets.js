@@ -67,7 +67,16 @@ async function syncFromSheet(dataType = 'all') {
     const result = await response.json();
     console.log('✅ تم استرجاع البيانات من Google Sheets');
     
-    return result.data || result;
+    // تحويل البيانات إلى الشكل المطلوب للتطبيق
+    if (result.data || result) {
+      const rawData = result.data || result;
+      return {
+        inventory: window.sheetsTransform.transformInventory(rawData.inventory || []),
+        loans: window.sheetsTransform.transformLoans(rawData.loans || []),
+        returns: window.sheetsTransform.transformReturns(rawData.returns || [])
+      };
+    }
+    return null;
     
   } catch (error) {
     console.warn('⚠️ Google Sheets sync read failed:', error.message);
