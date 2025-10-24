@@ -22,78 +22,26 @@
   }
 
   // وظائف المساعدة
-  const utils = {
-    createHiddenIframe: () => {
-      const iframeId = `sheets_iframe_${Date.now()}`;
-      let iframe = document.createElement('iframe');
-      iframe.name = iframeId;
-      iframe.style.display = 'none';
-      document.body.appendChild(iframe);
-      return iframe;
-    },
-    
-    createForm: (action, data) => {
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = action;
-      
-      Object.entries(data).forEach(([key, value]) => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = key;
-        input.value = typeof value === 'string' ? value : JSON.stringify(value);
-        form.appendChild(input);
-      });
-      
-      return form;
-    },
-    
-    submitFormWithRetry: async (url, data, maxRetries = 3) => {
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          const result = await new Promise((resolve, reject) => {
-            const iframe = utils.createHiddenIframe();
-            const form = utils.createForm(url, data);
-            form.target = iframe.name;
-            
-            let timeoutHandle = setTimeout(() => {
-              cleanup();
-              reject(new Error('انتهت مهلة الطلب'));
-            }, 10000);
-            
-            function cleanup() {
-              clearTimeout(timeoutHandle);
-              iframe.remove();
-              form.remove();
-            }
-            
-            iframe.onload = () => {
-              try {
-                const doc = iframe.contentDocument || iframe.contentWindow.document;
-                const responseText = doc.body.textContent;
-                const response = JSON.parse(responseText);
-                resolve(response);
-              } catch (error) {
-                reject(error);
-              } finally {
-                cleanup();
-              }
-            };
-            
-            document.body.appendChild(form);
-            form.submit();
-          });
-          
-          return result;
-          
-        } catch (error) {
-          console.warn(`⚠️ محاولة ${attempt}/${maxRetries} فشلت:`, error);
-          if (attempt === maxRetries) throw error;
-          await new Promise(resolve => setTimeout(resolve, attempt * 1000));
-        }
+  // دالة fetch حديثة للتواصل مع Google Sheets
+  async function fetchFromSheet(payload, maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(state.SHEETS_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error("Network error");
+        return await response.json();
+      } catch (error) {
+        console.warn(`⚠️ محاولة ${attempt}/${maxRetries} فشلت:`, error);
+        if (attempt === maxRetries) throw error;
+        await new Promise(resolve => setTimeout(resolve, attempt * 1000));
       }
     }
-  };
+  }
 
   // تعريف واجهة API الرئيسية
   const api = {
@@ -102,10 +50,9 @@
       if (!state.SHEETS_URL) {
         throw new Error('لم يتم تحديد رابط Google Sheets');
       }
-      
       try {
         console.log('📤 إرسال البيانات:', payload);
-        const result = await utils.submitFormWithRetry(state.SHEETS_URL, payload);
+        const result = await fetchFromSheet(payload);
         console.log('✅ تم إرسال البيانات بنجاح');
         return result;
       } catch (error) {
@@ -120,20 +67,13 @@
         console.warn('❌ لم يتم تحديد رابط Google Sheets');
         return null;
       }
-      
       try {
-        const result = await utils.submitFormWithRetry(state.SHEETS_URL, {
-          type: dataType,
-          t: Date.now() // لمنع التخزين المؤقت
-        });
-        
+        const result = await fetchFromSheet({ type: dataType, t: Date.now() });
         if (!result) {
           throw new Error('لم يتم استلام بيانات صالحة');
         }
-        
         console.log('✅ تم استلام البيانات بنجاح');
         return result;
-        
       } catch (error) {
         console.error('❌ خطأ في استرجاع البيانات:', error);
         throw error;
@@ -143,15 +83,10 @@
     // فحص عدد الصفوف
     async getSheetRowCount() {
       try {
-        const result = await utils.submitFormWithRetry(state.SHEETS_URL, {
-          type: 'get_row_count',
-          t: Date.now()
-        });
-        
+        const result = await fetchFromSheet({ type: 'get_row_count', t: Date.now() });
         const count = result?.rowCount || state.lastRowCount;
         state.lastRowCount = count;
         return count;
-        
       } catch (error) {
         console.warn('⚠️ خطأ في فحص عدد الصفوف:', error);
         return state.lastRowCount;
