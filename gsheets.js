@@ -2,7 +2,7 @@
 (() => {
   // تهيئة المتغيرات العامة
   const state = {
-    SHEETS_URL: "https://script.google.com/macros/s/AKfycby-cyvNjl9YmNLWRU_wKAmYi-ARxF3qY9T5T04OfS1bubyz5tcDZX4JM0u4BPK2F5MkQg/exec",
+    SHEETS_URL: "https://script.google.com/macros/s/AKfycbwdXIBW1i2iie1G688XRr4K61pet_W7Lx6fm1ME-GXJeMIxE-pB-e9ijYao8dbBYh8/exec",
     lastSyncTime: 0,
     syncCheckInterval: null,
     lastRowCount: 0,
@@ -23,33 +23,75 @@
 
   // وظائف المساعدة
   const utils = {
-    generateCallbackName: () => 'callback_' + Math.random().toString(36).substr(2, 9),
-    
     createHiddenIframe: () => {
-      let iframe = document.getElementById('sheets_iframe');
-      if (!iframe) {
-        iframe = document.createElement('iframe');
-        iframe.name = 'hidden_iframe';
-        iframe.id = 'sheets_iframe';
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
-      }
+      const iframeId = `sheets_iframe_${Date.now()}`;
+      let iframe = document.createElement('iframe');
+      iframe.name = iframeId;
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
       return iframe;
     },
     
     createForm: (action, data) => {
       const form = document.createElement('form');
       form.method = 'POST';
-      form.target = 'hidden_iframe';
       form.action = action;
       
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = 'data';
-      input.value = JSON.stringify(data);
-      form.appendChild(input);
+      Object.entries(data).forEach(([key, value]) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = typeof value === 'string' ? value : JSON.stringify(value);
+        form.appendChild(input);
+      });
       
       return form;
+    },
+    
+    submitFormWithRetry: async (url, data, maxRetries = 3) => {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const result = await new Promise((resolve, reject) => {
+            const iframe = utils.createHiddenIframe();
+            const form = utils.createForm(url, data);
+            form.target = iframe.name;
+            
+            let timeoutHandle = setTimeout(() => {
+              cleanup();
+              reject(new Error('انتهت مهلة الطلب'));
+            }, 10000);
+            
+            function cleanup() {
+              clearTimeout(timeoutHandle);
+              iframe.remove();
+              form.remove();
+            }
+            
+            iframe.onload = () => {
+              try {
+                const doc = iframe.contentDocument || iframe.contentWindow.document;
+                const responseText = doc.body.textContent;
+                const response = JSON.parse(responseText);
+                resolve(response);
+              } catch (error) {
+                reject(error);
+              } finally {
+                cleanup();
+              }
+            };
+            
+            document.body.appendChild(form);
+            form.submit();
+          });
+          
+          return result;
+          
+        } catch (error) {
+          console.warn(`⚠️ محاولة ${attempt}/${maxRetries} فشلت:`, error);
+          if (attempt === maxRetries) throw error;
+          await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+        }
+      }
     }
   };
 
@@ -61,147 +103,59 @@
         throw new Error('لم يتم تحديد رابط Google Sheets');
       }
       
-      return new Promise((resolve, reject) => {
-        try {
-          console.log('📤 إرسال البيانات:', payload);
-          const form = utils.createForm(state.SHEETS_URL, payload);
-          const iframe = utils.createHiddenIframe();
-          
-          iframe.onload = () => {
-            console.log('✅ تم إرسال البيانات بنجاح');
-            resolve(true);
-          };
-          
-          document.body.appendChild(form);
-          form.submit();
-          setTimeout(() => form.remove(), 100);
-        } catch (error) {
-          console.error('❌ خطأ في إرسال البيانات:', error);
-          reject(error);
-        }
-      });
+      try {
+        console.log('📤 إرسال البيانات:', payload);
+        const result = await utils.submitFormWithRetry(state.SHEETS_URL, payload);
+        console.log('✅ تم إرسال البيانات بنجاح');
+        return result;
+      } catch (error) {
+        console.error('❌ خطأ في إرسال البيانات:', error);
+        throw error;
+      }
     },
     
     // استرجاع البيانات من Google Sheets
-    async syncFromSheet(dataType = 'all', retryCount = 3) {
+    async syncFromSheet(dataType = 'all') {
       if (!state.SHEETS_URL) {
         console.warn('❌ لم يتم تحديد رابط Google Sheets');
         return null;
       }
       
-      return new Promise((resolve, reject) => {
-        const callbackName = utils.generateCallbackName();
-        const script = document.createElement('script');
-        let timeoutHandle;
+      try {
+        const result = await utils.submitFormWithRetry(state.SHEETS_URL, {
+          type: dataType,
+          t: Date.now() // لمنع التخزين المؤقت
+        });
         
-        window[callbackName] = (result) => {
-          clearTimeout(timeoutHandle);
-          delete window[callbackName];
-          script.remove();
-          
-          if (!result) {
-            console.warn('❌ لم يتم استلام بيانات');
-            if (retryCount > 0) {
-              console.log(`🔄 إعادة المحاولة... (${retryCount} محاولات متبقية)`);
-              setTimeout(() => {
-                this.syncFromSheet(dataType, retryCount - 1)
-                  .then(resolve)
-                  .catch(reject);
-              }, 1000);
-              return;
-            }
-            resolve(null);
-            return;
-          }
-          
-          console.log('✅ تم استلام البيانات بنجاح');
-          resolve(result);
-        };
+        if (!result) {
+          throw new Error('لم يتم استلام بيانات صالحة');
+        }
         
-        script.onerror = (error) => {
-          clearTimeout(timeoutHandle);
-          delete window[callbackName];
-          script.remove();
-          console.warn('⚠️ خطأ في تحميل البيانات:', error);
-          
-          if (retryCount > 0) {
-            console.log(`🔄 إعادة المحاولة... (${retryCount} محاولات متبقية)`);
-            setTimeout(() => {
-              this.syncFromSheet(dataType, retryCount - 1)
-                .then(resolve)
-                .catch(reject);
-            }, 1000);
-            return;
-          }
-          
-          reject(new Error('فشل في تحميل البيانات بعد عدة محاولات'));
-        };
+        console.log('✅ تم استلام البيانات بنجاح');
+        return result;
         
-        // إضافة مهلة زمنية لكل محاولة
-        timeoutHandle = setTimeout(() => {
-          script.onerror(new Error('انتهت مهلة الطلب'));
-        }, 10000);
-        
-        const url = new URL(state.SHEETS_URL);
-        url.searchParams.set('callback', callbackName);
-        url.searchParams.set('type', dataType);
-        url.searchParams.set('_', Date.now()); // منع التخزين المؤقت
-        
-        script.src = url.toString();
-        document.body.appendChild(script);
-      });
+      } catch (error) {
+        console.error('❌ خطأ في استرجاع البيانات:', error);
+        throw error;
+      }
     },
     
     // فحص عدد الصفوف
-    async getSheetRowCount(retryCount = 3) {
-      if (!state.SHEETS_URL) {
+    async getSheetRowCount() {
+      try {
+        const result = await utils.submitFormWithRetry(state.SHEETS_URL, {
+          type: 'get_row_count',
+          t: Date.now()
+        });
+        
+        const count = result?.rowCount || state.lastRowCount;
+        state.lastRowCount = count;
+        return count;
+        
+      } catch (error) {
+        console.warn('⚠️ خطأ في فحص عدد الصفوف:', error);
         return state.lastRowCount;
       }
-      
-      return new Promise((resolve) => {
-        const callbackName = utils.generateCallbackName();
-        const script = document.createElement('script');
-        let timeoutHandle;
-        
-        window[callbackName] = (result) => {
-          clearTimeout(timeoutHandle);
-          delete window[callbackName];
-          script.remove();
-          const count = result?.rowCount || state.lastRowCount;
-          state.lastRowCount = count;
-          resolve(count);
-        };
-        
-        script.onerror = () => {
-          clearTimeout(timeoutHandle);
-          delete window[callbackName];
-          script.remove();
-          
-          if (retryCount > 0) {
-            console.log(`🔄 إعادة محاولة فحص عدد الصفوف... (${retryCount} محاولات متبقية)`);
-            setTimeout(() => {
-              this.getSheetRowCount(retryCount - 1).then(resolve);
-            }, 1000);
-            return;
-          }
-          
-          console.warn('⚠️ فشل في فحص عدد الصفوف - استخدام القيمة السابقة');
-          resolve(state.lastRowCount);
-        };
-        
-        // إضافة مهلة زمنية لكل محاولة
-        timeoutHandle = setTimeout(() => {
-          script.onerror();
-        }, 10000);
-        
-        const url = new URL(state.SHEETS_URL);
-        url.searchParams.set('callback', callbackName);
-        url.searchParams.set('type', 'get_row_count');
-        url.searchParams.set('_', Date.now()); // منع التخزين المؤقت
-        
-        script.src = url.toString();
-        document.body.appendChild(script);
-      });
     },
     
     // دمج البيانات الجديدة
@@ -211,17 +165,17 @@
         return false;
       }
       
-      console.log('🔄 فحص البيانات الجديدة من Google Sheets...');
-      const sheetData = await this.syncFromSheet('all');
-      
-      if (!sheetData) {
-        console.warn('⚠️ لا يمكن الوصول إلى Google Sheets');
-        return false;
-      }
-      
-      let hasChanges = false;
-      
       try {
+        console.log('🔄 فحص البيانات الجديدة من Google Sheets...');
+        const sheetData = await this.syncFromSheet('all');
+        
+        if (!sheetData) {
+          console.warn('⚠️ لا يمكن الوصول إلى Google Sheets');
+          return false;
+        }
+        
+        let hasChanges = false;
+        
         // إضافة العناصر الجديدة من المخزون
         if (Array.isArray(sheetData.inventory)) {
           for (const item of sheetData.inventory) {
@@ -310,7 +264,7 @@
       return state.isAutoSyncEnabled;
     }
   };
-
+  
   // تعريف hooks للتطبيق
   window.gsheetHooks = {
     inventory: {
@@ -407,72 +361,91 @@
       addInventory: async (item) => {
         const rec = { ...item, id: item.id || genId('i') };
         await api.postToSheet({ type: 'inventory_add', timestamp: new Date().toISOString(), data: rec });
-        const data = await api.syncFromSheet('inventory');
-        if (data) notify('inventory', data);
+        try {
+          const data = await api.syncFromSheet('inventory');
+          if (data) notify('inventory', data);
+        } catch (e) {
+          console.warn('⚠️ خطأ في تحديث البيانات بعد الإضافة:', e);
+        }
         return rec;
       },
       updateInventory: async (id, changes) => {
         await api.postToSheet({ type: 'inventory_update', timestamp: new Date().toISOString(), id, changes });
-        const data = await api.syncFromSheet('inventory');
-        if (data) notify('inventory', data);
+        try {
+          const data = await api.syncFromSheet('inventory');
+          if (data) notify('inventory', data);
+        } catch (e) {
+          console.warn('⚠️ خطأ في تحديث البيانات بعد التعديل:', e);
+        }
       },
       deleteInventory: async (id) => {
         await api.postToSheet({ type: 'inventory_delete', timestamp: new Date().toISOString(), id });
-        const data = await api.syncFromSheet('inventory');
-        if (data) notify('inventory', data);
+        try {
+          const data = await api.syncFromSheet('inventory');
+          if (data) notify('inventory', data);
+        } catch (e) {
+          console.warn('⚠️ خطأ في تحديث البيانات بعد الحذف:', e);
+        }
       },
       addLoan: async (rec) => {
         const r = { ...rec, id: rec.id || genId('l') };
         await api.postToSheet({ type: 'loan_add', timestamp: new Date().toISOString(), data: r });
-        const data = await api.syncFromSheet('loans');
-        if (data) notify('loans', data);
+        try {
+          const data = await api.syncFromSheet('loans');
+          if (data) notify('loans', data);
+        } catch (e) {
+          console.warn('⚠️ خطأ في تحديث السلفيات بعد الإضافة:', e);
+        }
         return r;
       },
       deleteLoan: async (id) => {
         await api.postToSheet({ type: 'loan_delete', timestamp: new Date().toISOString(), id });
-        const data = await api.syncFromSheet('loans');
-        if (data) notify('loans', data);
+        try {
+          const data = await api.syncFromSheet('loans');
+          if (data) notify('loans', data);
+        } catch (e) {
+          console.warn('⚠️ خطأ في تحديث السلفيات بعد الحذف:', e);
+        }
       },
       addReturn: async (rec) => {
         const r = { ...rec, id: rec.id || genId('r') };
         await api.postToSheet({ type: 'return_add', timestamp: new Date().toISOString(), data: r });
-        const data = await api.syncFromSheet('returns');
-        if (data) notify('returns', data);
+        try {
+          const data = await api.syncFromSheet('returns');
+          if (data) notify('returns', data);
+        } catch (e) {
+          console.warn('⚠️ خطأ في تحديث الإرجاعات بعد الإضافة:', e);
+        }
         return r;
       },
       deleteReturn: async (id) => {
         await api.postToSheet({ type: 'return_delete', timestamp: new Date().toISOString(), id });
-        const data = await api.syncFromSheet('returns');
-        if (data) notify('returns', data);
+        try {
+          const data = await api.syncFromSheet('returns');
+          if (data) notify('returns', data);
+        } catch (e) {
+          console.warn('⚠️ خطأ في تحديث الإرجاعات بعد الحذف:', e);
+        }
       },
       subscribeInventory: (cb) => {
         subscribers.inventory.add(cb);
         api.syncFromSheet('inventory')
           .then(data => data && cb(data))
-          .catch(error => {
-            console.warn('⚠️ خطأ في تحميل بيانات المخزون:', error);
-            cb([]); // إرسال مصفوفة فارغة في حالة الفشل
-          });
+          .catch(() => cb([]));
         return () => subscribers.inventory.delete(cb);
       },
       subscribeLoans: (cb) => {
         subscribers.loans.add(cb);
         api.syncFromSheet('loans')
           .then(data => data && cb(data))
-          .catch(error => {
-            console.warn('⚠️ خطأ في تحميل بيانات السلفيات:', error);
-            cb([]); // إرسال مصفوفة فارغة في حالة الفشل
-          });
+          .catch(() => cb([]));
         return () => subscribers.loans.delete(cb);
       },
       subscribeReturns: (cb) => {
         subscribers.returns.add(cb);
         api.syncFromSheet('returns')
           .then(data => data && cb(data))
-          .catch(error => {
-            console.warn('⚠️ خطأ في تحميل بيانات الإرجاعات:', error);
-            cb([]); // إرسال مصفوفة فارغة في حالة الفشل
-          });
+          .catch(() => cb([]));
         return () => subscribers.returns.delete(cb);
       }
     };
