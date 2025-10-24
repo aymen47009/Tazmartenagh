@@ -41,9 +41,24 @@ if (mediaDark && typeof mediaDark.addEventListener === 'function'){
 }
 
 async function loadAll(){
-  state.inventory = JSON.parse(localStorage.getItem(STORAGE_KEYS.INVENTORY) || '[]');
-  state.loans = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOANS) || '[]');
-  state.returns = JSON.parse(localStorage.getItem(STORAGE_KEYS.RETURNS) || '[]');
+  // تهيئة الحالة بمصفوفات فارغة
+  state.inventory = [];
+  state.loans = [];
+  state.returns = [];
+
+  // محاولة تحميل البيانات المحلية
+  try {
+    state.inventory = JSON.parse(localStorage.getItem(STORAGE_KEYS.INVENTORY) || '[]');
+    state.loans = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOANS) || '[]');
+    state.returns = JSON.parse(localStorage.getItem(STORAGE_KEYS.RETURNS) || '[]');
+  } catch (error) {
+    console.warn('⚠️ خطأ في تحميل البيانات المحلية:', error);
+  }
+
+  // تأكد من أن جميع المتغيرات مصفوفات
+  if (!Array.isArray(state.inventory)) state.inventory = [];
+  if (!Array.isArray(state.loans)) state.loans = [];
+  if (!Array.isArray(state.returns)) state.returns = [];
 
   // محاولة المزامنة مع Google Sheets إذا كان متاحاً
   try {
@@ -51,9 +66,19 @@ async function loadAll(){
       console.log('🔄 جاري مزامنة البيانات مع Google Sheets...');
       const data = await window.sheetSync.syncFromSheet('all');
       if (data) {
-        if (Array.isArray(data.inventory)) state.inventory = data.inventory;
-        if (Array.isArray(data.loans)) state.loans = data.loans;
-        if (Array.isArray(data.returns)) state.returns = data.returns;
+        // تحديث البيانات فقط إذا كانت مصفوفات صحيحة
+        if (Array.isArray(data.inventory)) {
+          state.inventory = data.inventory;
+          console.log(`📊 تم تحميل ${data.inventory.length} عنصر من المخزون`);
+        }
+        if (Array.isArray(data.loans)) {
+          state.loans = data.loans;
+          console.log(`📊 تم تحميل ${data.loans.length} سلفية`);
+        }
+        if (Array.isArray(data.returns)) {
+          state.returns = data.returns;
+          console.log(`📊 تم تحميل ${data.returns.length} إرجاع`);
+        }
         console.log('✅ تم جلب البيانات من Google Sheets');
       }
     }
@@ -155,8 +180,15 @@ function goto(route){
 function renderInventory(filter=''){
   const list = document.getElementById('inventoryList');
   const q = filter.trim();
+  
+  // تأكد من أن state.inventory مصفوفة
+  if (!Array.isArray(state.inventory)) {
+    console.warn('⚠️ المخزون ليس مصفوفة، إعادة تهيئة...');
+    state.inventory = [];
+  }
+
   const items = state.inventory
-    .filter(i=> i.name.includes(q))
+    .filter(i => i && typeof i === 'object' && i.name && i.name.includes(q))
     .sort((a,b)=> a.name.localeCompare(b.name,'ar'));
   list.innerHTML = '';
   for(const it of items){

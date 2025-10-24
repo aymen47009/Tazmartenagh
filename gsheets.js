@@ -70,13 +70,41 @@ async function syncFromSheet(dataType = 'all') {
     // تحويل البيانات إلى الشكل المطلوب للتطبيق
     if (result.data || result) {
       const rawData = result.data || result;
-      return {
-        inventory: window.sheetsTransform.transformInventory(rawData.inventory || []),
-        loans: window.sheetsTransform.transformLoans(rawData.loans || []),
-        returns: window.sheetsTransform.transformReturns(rawData.returns || [])
+      
+      // تأكد من أن البيانات مصفوفات
+      const data = {
+        inventory: Array.isArray(rawData.inventory) ? rawData.inventory : [],
+        loans: Array.isArray(rawData.loans) ? rawData.loans : [],
+        returns: Array.isArray(rawData.returns) ? rawData.returns : []
       };
+
+      // تحويل البيانات
+      try {
+        console.log('📝 تحويل بيانات المخزون...');
+        data.inventory = window.sheetsTransform.transformInventory(data.inventory);
+        
+        console.log('📝 تحويل بيانات السلفيات...');
+        data.loans = window.sheetsTransform.transformLoans(data.loans);
+        
+        console.log('📝 تحويل بيانات الإرجاعات...');
+        data.returns = window.sheetsTransform.transformReturns(data.returns);
+        
+        console.log('✅ تم تحويل جميع البيانات بنجاح');
+        return data;
+      } catch (error) {
+        console.error('❌ خطأ في تحويل البيانات:', error);
+        return {
+          inventory: [],
+          loans: [],
+          returns: []
+        };
+      }
     }
-    return null;
+    return {
+      inventory: [],
+      loans: [],
+      returns: []
+    };
     
   } catch (error) {
     console.warn('⚠️ Google Sheets sync read failed:', error.message);
