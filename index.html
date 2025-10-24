@@ -223,9 +223,9 @@
       // Load QRCode library with multiple fallbacks
       function loadQRCode() {
         const sources = [
-          'https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js',
-          'https://unpkg.com/qrcode/build/qrcode.min.js',
-          'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
+          'https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js',
+          'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.js',
+          'https://unpkg.com/qrcode-generator@1.4.4/qrcode.js'
         ];
         
         let currentIndex = 0;
