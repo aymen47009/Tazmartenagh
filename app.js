@@ -68,11 +68,32 @@ function save(key){
   if(key === STORAGE_KEYS.RETURNS) localStorage.setItem(key, JSON.stringify(state.returns));
 }
 
-function getAvailableFor(name){
-  const total = (state.inventory.find(i=>i.name===name)?.totalQty) || 0;
-  const loaned = state.loans.filter(l=>l.itemName===name).reduce((s,l)=>s+Number(l.qty||0),0);
-  const returned = state.returns.filter(r=>r.itemName===name).reduce((s,r)=>s+Number(r.qty||0),0);
-  return total - loaned + returned;
+function getAvailableFor(name, showDetails = false){
+  // البحث عن العنصر في المخزون
+  const item = state.inventory.find(i => i.name === name);
+  const total = (item?.totalQty) || 0;
+  
+  // حساب مجموع السلفيات
+  const loansList = state.loans.filter(l => l.itemName === name);
+  const loaned = loansList.reduce((s,l) => s + Number(l.qty||0), 0);
+  
+  // حساب مجموع الإرجاعات
+  const returnsList = state.returns.filter(r => r.itemName === name);
+  const returned = returnsList.reduce((s,r) => s + Number(r.qty||0), 0);
+  
+  // حساب الكمية المتاحة
+  const available = total - loaned + returned;
+
+  if (showDetails) {
+    console.log(`📊 تفاصيل حساب الكمية المتاحة لـ "${name}":
+    - الكمية الكلية: ${total}
+    - مجموع السلفيات: ${loaned} (${loansList.length} سلفية)
+    - مجموع الإرجاعات: ${returned} (${returnsList.length} إرجاع)
+    = الكمية المتاحة: ${available}
+    `);
+  }
+  
+  return available;
 }
 
 function getReturnedQtyForLoan(loanId){
@@ -147,10 +168,11 @@ function renderInventory(filter=''){
         <div>${it.name}</div>
         <div class="meta">الكلية: ${it.totalQty} • الأصل: ${it.initialQty}</div>
       </div>
-      <div class="qty" title="المتاحة">${available}</div>
+      <div class="qty" title="المتاحة" style="cursor: pointer" onclick="getAvailableFor('${it.name}', true)">${available}</div>
       <div class="actions">
         <button class="btn" data-act="qr">QR</button>
         <button class="btn" data-act="edit">تعديل</button>
+        <button class="btn info" data-act="details" onclick="getAvailableFor('${it.name}', true)">تفاصيل</button>
       </div>`;
     el.querySelector('[data-act="edit"]').onclick = ()=> openItemDialog(it.id);
     el.querySelector('[data-act="qr"]').onclick = ()=> showItemQr(it);
