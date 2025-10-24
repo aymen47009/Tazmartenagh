@@ -1,6 +1,6 @@
 // Google Sheets Sync - مع مراقبة تلقائية للتغييرات
 // Prefer endpoint from `window.gsheetSyncConfig.endpointUrl` if provided by gsheets-config.js
-let SHEETS_URL = "https://script.google.com/macros/s/AKfycby-cyvNjl9YmNLWRU_wKAmYi-ARxF3qY9T5T04OfS1bubyz5tcDZX4JM0u4BPK2F5MkQg/exec";
+let SHEETS_URL = "https://script.google.com/macros/s/AKfycbwdXIBW1i2iie1G688XRr4K61pet_W7Lx6fm1ME-GXJeMIxE-pB-e9ijYao8dbBYh8/exec";
 try {
   if (window.gsheetSyncConfig && window.gsheetSyncConfig.endpointUrl) {
     SHEETS_URL = window.gsheetSyncConfig.endpointUrl;
@@ -527,5 +527,6 @@ console.log('✅ Google Sheets Sync Initialized with Auto-Monitoring');
 
   console.log('\u2705 window.cloud provided by Google Sheets bridge');
 })();
+
 
 
