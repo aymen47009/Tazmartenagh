@@ -40,13 +40,27 @@ if (mediaDark && typeof mediaDark.addEventListener === 'function'){
   mediaDark.addEventListener('change', ()=>{ if((localStorage.getItem('theme')||'auto')==='auto'){ setDataTheme('auto'); } });
 }
 
-function loadAll(){
+async function loadAll(){
   state.inventory = JSON.parse(localStorage.getItem(STORAGE_KEYS.INVENTORY) || '[]');
   state.loans = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOANS) || '[]');
   state.returns = JSON.parse(localStorage.getItem(STORAGE_KEYS.RETURNS) || '[]');
-}
 
-syncFromSheets(); // جلب البيانات من Google Sheets عند بدء التطبيق
+  // محاولة المزامنة مع Google Sheets إذا كان متاحاً
+  try {
+    if (window.sheetSync && window.sheetSync.syncFromSheet) {
+      console.log('🔄 جاري مزامنة البيانات مع Google Sheets...');
+      const data = await window.sheetSync.syncFromSheet('all');
+      if (data) {
+        if (Array.isArray(data.inventory)) state.inventory = data.inventory;
+        if (Array.isArray(data.loans)) state.loans = data.loans;
+        if (Array.isArray(data.returns)) state.returns = data.returns;
+        console.log('✅ تم جلب البيانات من Google Sheets');
+      }
+    }
+  } catch (error) {
+    console.warn('⚠️ فشل المزامنة مع Google Sheets:', error.message);
+  }
+}
 
 function save(key){
   if(key === STORAGE_KEYS.INVENTORY) localStorage.setItem(key, JSON.stringify(state.inventory));
