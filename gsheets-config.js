@@ -6,8 +6,9 @@
 
 window.gsheetSyncConfig = {
   enabled: true,
-  endpointUrl: "https://script.google.com/macros/s/AKfycbzcQYP3pzVywy1Ow2Jj4TQmtc01FerQRaBlsRkYiqJ7iYB7vfev7cgXsLCbUFP-b36MBg/exec"
+  endpointUrl: "https://script.google.com/macros/s/AKfycbwOKbhQHrMinczsmIRwPWzmbZu2St_PSw1PRBM5oJZo/dev"
 };
+
 
 
 
