@@ -1,6 +1,6 @@
 // Google Sheets Sync - مع مراقبة تلقائية للتغييرات
 // Prefer endpoint from `window.gsheetSyncConfig.endpointUrl` if provided by gsheets-config.js
-let SHEETS_URL = "https://script.google.com/macros/s/AKfycbxwJ2BFjgP6l22MrUhX1248smkEFewubXpiD0ccedQAYdNxHkVB8FYtQcki4Zll8Zg8SQ/exec";
+let SHEETS_URL = "https://script.google.com/macros/s/AKfycby-cyvNjl9YmNLWRU_wKAmYi-ARxF3qY9T5T04OfS1bubyz5tcDZX4JM0u4BPK2F5MkQg/exec";
 try {
   if (window.gsheetSyncConfig && window.gsheetSyncConfig.endpointUrl) {
     SHEETS_URL = window.gsheetSyncConfig.endpointUrl;
