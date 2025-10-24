@@ -2,7 +2,7 @@
 (() => {
   // تهيئة المتغيرات العامة
   const state = {
-    SHEETS_URL: "https://script.google.com/macros/s/AKfycbwdXIBW1i2iie1G688XRr4K61pet_W7Lx6fm1ME-GXJeMIxE-pB-e9ijYao8dbBYh8/exec",
+    SHEETS_URL: "https://script.google.com/macros/s/AKfycby-cyvNjl9YmNLWRU_wKAmYi-ARxF3qY9T5T04OfS1bubyz5tcDZX4JM0u4BPK2F5MkQg/exec",
     lastSyncTime: 0,
     syncCheckInterval: null,
     lastRowCount: 0,
@@ -83,7 +83,7 @@
     },
     
     // استرجاع البيانات من Google Sheets
-    async syncFromSheet(dataType = 'all') {
+    async syncFromSheet(dataType = 'all', retryCount = 3) {
       if (!state.SHEETS_URL) {
         console.warn('❌ لم يتم تحديد رابط Google Sheets');
         return null;
@@ -92,13 +92,24 @@
       return new Promise((resolve, reject) => {
         const callbackName = utils.generateCallbackName();
         const script = document.createElement('script');
+        let timeoutHandle;
         
         window[callbackName] = (result) => {
+          clearTimeout(timeoutHandle);
           delete window[callbackName];
           script.remove();
           
           if (!result) {
             console.warn('❌ لم يتم استلام بيانات');
+            if (retryCount > 0) {
+              console.log(`🔄 إعادة المحاولة... (${retryCount} محاولات متبقية)`);
+              setTimeout(() => {
+                this.syncFromSheet(dataType, retryCount - 1)
+                  .then(resolve)
+                  .catch(reject);
+              }, 1000);
+              return;
+            }
             resolve(null);
             return;
           }
@@ -107,19 +118,42 @@
           resolve(result);
         };
         
-        script.onerror = () => {
+        script.onerror = (error) => {
+          clearTimeout(timeoutHandle);
           delete window[callbackName];
           script.remove();
-          reject(new Error('فشل في تحميل البيانات'));
+          console.warn('⚠️ خطأ في تحميل البيانات:', error);
+          
+          if (retryCount > 0) {
+            console.log(`🔄 إعادة المحاولة... (${retryCount} محاولات متبقية)`);
+            setTimeout(() => {
+              this.syncFromSheet(dataType, retryCount - 1)
+                .then(resolve)
+                .catch(reject);
+            }, 1000);
+            return;
+          }
+          
+          reject(new Error('فشل في تحميل البيانات بعد عدة محاولات'));
         };
         
-        script.src = `${state.SHEETS_URL}?callback=${callbackName}&type=${dataType}`;
+        // إضافة مهلة زمنية لكل محاولة
+        timeoutHandle = setTimeout(() => {
+          script.onerror(new Error('انتهت مهلة الطلب'));
+        }, 10000);
+        
+        const url = new URL(state.SHEETS_URL);
+        url.searchParams.set('callback', callbackName);
+        url.searchParams.set('type', dataType);
+        url.searchParams.set('_', Date.now()); // منع التخزين المؤقت
+        
+        script.src = url.toString();
         document.body.appendChild(script);
       });
     },
     
     // فحص عدد الصفوف
-    async getSheetRowCount() {
+    async getSheetRowCount(retryCount = 3) {
       if (!state.SHEETS_URL) {
         return state.lastRowCount;
       }
@@ -127,8 +161,10 @@
       return new Promise((resolve) => {
         const callbackName = utils.generateCallbackName();
         const script = document.createElement('script');
+        let timeoutHandle;
         
         window[callbackName] = (result) => {
+          clearTimeout(timeoutHandle);
           delete window[callbackName];
           script.remove();
           const count = result?.rowCount || state.lastRowCount;
@@ -136,7 +172,34 @@
           resolve(count);
         };
         
-        script.src = `${state.SHEETS_URL}?callback=${callbackName}&type=get_row_count`;
+        script.onerror = () => {
+          clearTimeout(timeoutHandle);
+          delete window[callbackName];
+          script.remove();
+          
+          if (retryCount > 0) {
+            console.log(`🔄 إعادة محاولة فحص عدد الصفوف... (${retryCount} محاولات متبقية)`);
+            setTimeout(() => {
+              this.getSheetRowCount(retryCount - 1).then(resolve);
+            }, 1000);
+            return;
+          }
+          
+          console.warn('⚠️ فشل في فحص عدد الصفوف - استخدام القيمة السابقة');
+          resolve(state.lastRowCount);
+        };
+        
+        // إضافة مهلة زمنية لكل محاولة
+        timeoutHandle = setTimeout(() => {
+          script.onerror();
+        }, 10000);
+        
+        const url = new URL(state.SHEETS_URL);
+        url.searchParams.set('callback', callbackName);
+        url.searchParams.set('type', 'get_row_count');
+        url.searchParams.set('_', Date.now()); // منع التخزين المؤقت
+        
+        script.src = url.toString();
         document.body.appendChild(script);
       });
     },
@@ -384,17 +447,32 @@
       },
       subscribeInventory: (cb) => {
         subscribers.inventory.add(cb);
-        api.syncFromSheet('inventory').then(data => data && cb(data));
+        api.syncFromSheet('inventory')
+          .then(data => data && cb(data))
+          .catch(error => {
+            console.warn('⚠️ خطأ في تحميل بيانات المخزون:', error);
+            cb([]); // إرسال مصفوفة فارغة في حالة الفشل
+          });
         return () => subscribers.inventory.delete(cb);
       },
       subscribeLoans: (cb) => {
         subscribers.loans.add(cb);
-        api.syncFromSheet('loans').then(data => data && cb(data));
+        api.syncFromSheet('loans')
+          .then(data => data && cb(data))
+          .catch(error => {
+            console.warn('⚠️ خطأ في تحميل بيانات السلفيات:', error);
+            cb([]); // إرسال مصفوفة فارغة في حالة الفشل
+          });
         return () => subscribers.loans.delete(cb);
       },
       subscribeReturns: (cb) => {
         subscribers.returns.add(cb);
-        api.syncFromSheet('returns').then(data => data && cb(data));
+        api.syncFromSheet('returns')
+          .then(data => data && cb(data))
+          .catch(error => {
+            console.warn('⚠️ خطأ في تحميل بيانات الإرجاعات:', error);
+            cb([]); // إرسال مصفوفة فارغة في حالة الفشل
+          });
         return () => subscribers.returns.delete(cb);
       }
     };
@@ -403,5 +481,4 @@
   }
 
   console.log('✅ تم تهيئة Google Sheets Sync مع المراقبة التلقائية');
-
 })();
