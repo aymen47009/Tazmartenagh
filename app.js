@@ -217,9 +217,16 @@ function renderInventory(filter=''){
 function renderLoans(filter=''){
   const list = document.getElementById('loansList');
   const q = filter.trim();
+  // تأكد من أن state.loans مصفوفة
+  if (!Array.isArray(state.loans)) {
+    console.warn('⚠️ السلفيات ليست مصفوفة، إعادة تهيئة...');
+    state.loans = [];
+  }
+
   const items = state.loans
-    .filter(l=> [l.itemName,l.person,l.dept,l.phone].some(x=> (x||'').includes(q)))
-    .sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+    .filter(l => l && typeof l === 'object') // تأكد من أن كل سلفية كائن صحيح
+    .filter(l => [l.itemName,l.person,l.dept,l.phone].some(x => (x||'').includes(q)))
+    .sort((a,b) => (b.date||'').localeCompare(a.date||''));
   list.innerHTML='';
   for(const it of items){
     const returnedQty = getReturnedQtyForLoan(it.id);
@@ -285,19 +292,29 @@ function renderLoans(filter=''){
 function renderReturns(filter=''){
   const list = document.getElementById('returnsList');
   const q = filter.trim();
+  
+  // تأكد من أن state.returns مصفوفة
+  if (!Array.isArray(state.returns)) {
+    console.warn('⚠️ الإرجاعات ليست مصفوفة، إعادة تهيئة...');
+    state.returns = [];
+  }
+  
   let items = state.returns;
   
-  // If we have a specific loan filter, show only returns for that loan
+  // تصفية الإرجاعات غير الصالحة
+  items = items.filter(r => r && typeof r === 'object');
+  
+  // إذا كان هناك فلتر لسلفية محددة، اعرض فقط إرجاعات تلك السلفية
   if(window.currentLoanFilter) {
     items = items.filter(r => r.loanId === window.currentLoanFilter);
   }
   
-  // Apply text filter if provided
+  // تطبيق فلتر النص إذا وجد
   if(q) {
-    items = items.filter(r=> [r.itemName,r.notes].some(x=> (x||'').includes(q)));
+    items = items.filter(r => [r.itemName,r.notes].some(x => (x||'').includes(q)));
   }
   
-  items = items.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+  items = items.sort((a,b) => (b.date||'').localeCompare(a.date||''));
   list.innerHTML='';
   for(const it of items){
     // Find the loan to get borrower name
@@ -331,11 +348,24 @@ function renderReturns(filter=''){
 }
 
 function renderReports(){
-  const totalLoaned = state.loans.reduce((s,l)=> s + Number(l.qty||0), 0);
+  // تأكد من أن state.loans مصفوفة
+  if (!Array.isArray(state.loans)) {
+    console.warn('⚠️ السلفيات ليست مصفوفة، إعادة تهيئة...');
+    state.loans = [];
+  }
+
+  // حساب مجموع السلفيات
+  const totalLoaned = state.loans
+    .filter(l => l && typeof l === 'object' && typeof l.qty !== 'undefined') // تأكد من وجود الكمية
+    .reduce((s,l) => s + Number(l.qty||0), 0);
   document.getElementById('stat_total_loaned').textContent = totalLoaned;
+
   const today = todayStr();
-  // Only count loans that are due AND not fully returned
-  const dueToday = state.loans.filter(l=> l.due && l.due <= today && !isLoanFullyReturned(l)).length;
+  // فقط عد السلفيات المستحقة وغير المرجعة بالكامل
+  const dueToday = state.loans
+    .filter(l => l && typeof l === 'object') // تأكد من أن السلفية كائن صحيح
+    .filter(l => l.due && l.due <= today && !isLoanFullyReturned(l))
+    .length;
   document.getElementById('stat_due_today').textContent = dueToday;
   const dueList = document.getElementById('dueList');
   dueList.innerHTML='';
@@ -361,12 +391,18 @@ function renderReports(){
       <div></div>`;
     dueList.appendChild(el);
   }
-  // In-use and damaged stats
-  const totalReturned = state.returns.reduce((s,r)=> s + Number(r.qty||0), 0);
+  // إحصائيات قيد الاستخدام والتالف
+  const totalReturned = state.returns
+    .filter(r => r && typeof r === 'object' && typeof r.qty !== 'undefined')
+    .reduce((s,r) => s + Number(r.qty||0), 0);
+  
   const inUseEl = document.getElementById('stat_in_use');
   if(inUseEl) inUseEl.textContent = Math.max(totalLoaned - totalReturned, 0);
+  
   const damagedEl = document.getElementById('stat_damaged');
-  if(damagedEl) damagedEl.textContent = state.returns.reduce((s,r)=> s + Number(r.damaged||0), 0);
+  if(damagedEl) damagedEl.textContent = state.returns
+    .filter(r => r && typeof r === 'object' && typeof r.damaged !== 'undefined')
+    .reduce((s,r) => s + Number(r.damaged||0), 0);
 }
 
 function fillDatalists(){
