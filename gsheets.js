@@ -2,7 +2,7 @@
 (() => {
   // تهيئة المتغيرات العامة
   const state = {
-    SHEETS_URL: "https://script.google.com/macros/s/AKfycbw3_fRDskiSXGuBvS4CfZ5w4EmsV45WxcDGS8hddDvkYu-u9E1WlF8n-BoIQruLkLAvJg/exec",
+    SHEETS_URL: "https://script.google.com/macros/s/AKfycbym9AdHT0ZRhuEXnrEfFIDCIYTKN9jshioRm8NhXcrh6Psqy--cD-ifoivmFAmUuxiEwQ/exec",
     lastSyncTime: 0,
     syncCheckInterval: null,
     lastRowCount: 0,
@@ -310,7 +310,7 @@
         await api.postToSheet({ type: 'inventory_add', timestamp: new Date().toISOString(), data: rec });
         try {
           const response = await api.syncFromSheet('inventory');
-          if (response?.data?.inventory) notify('inventory', response.data.inventory);
+          if (response?.inventory) notify('inventory', response.inventory);
         } catch (e) {
           console.warn('⚠️ خطأ في تحديث البيانات بعد الإضافة:', e);
         }
@@ -320,7 +320,7 @@
         await api.postToSheet({ type: 'inventory_update', timestamp: new Date().toISOString(), id, changes });
         try {
           const response = await api.syncFromSheet('inventory');
-          if (response?.data?.inventory) notify('inventory', response.data.inventory);
+          if (response?.inventory) notify('inventory', response.inventory);
         } catch (e) {
           console.warn('⚠️ خطأ في تحديث البيانات بعد التعديل:', e);
         }
@@ -329,7 +329,7 @@
         await api.postToSheet({ type: 'inventory_delete', timestamp: new Date().toISOString(), id });
         try {
           const response = await api.syncFromSheet('inventory');
-          if (response?.data?.inventory) notify('inventory', response.data.inventory);
+          if (response?.inventory) notify('inventory', response.inventory);
         } catch (e) {
           console.warn('⚠️ خطأ في تحديث البيانات بعد الحذف:', e);
         }
@@ -339,7 +339,7 @@
         await api.postToSheet({ type: 'loan_add', timestamp: new Date().toISOString(), data: r });
         try {
           const response = await api.syncFromSheet('loans');
-          if (response?.data?.loans) notify('loans', response.data.loans);
+          if (response?.loans) notify('loans', response.loans);
         } catch (e) {
           console.warn('⚠️ خطأ في تحديث السلفيات بعد الإضافة:', e);
         }
@@ -349,7 +349,7 @@
         await api.postToSheet({ type: 'loan_delete', timestamp: new Date().toISOString(), id });
         try {
           const response = await api.syncFromSheet('loans');
-          if (response?.data?.loans) notify('loans', response.data.loans);
+          if (response?.loans) notify('loans', response.loans);
         } catch (e) {
           console.warn('⚠️ خطأ في تحديث السلفيات بعد الحذف:', e);
         }
@@ -359,7 +359,7 @@
         await api.postToSheet({ type: 'return_add', timestamp: new Date().toISOString(), data: r });
         try {
           const response = await api.syncFromSheet('returns');
-          if (response?.data?.returns) notify('returns', response.data.returns);
+          if (response?.returns) notify('returns', response.returns);
         } catch (e) {
           console.warn('⚠️ خطأ في تحديث الإرجاعات بعد الإضافة:', e);
         }
@@ -369,7 +369,7 @@
         await api.postToSheet({ type: 'return_delete', timestamp: new Date().toISOString(), id });
         try {
           const response = await api.syncFromSheet('returns');
-          if (response?.data?.returns) notify('returns', response.data.returns);
+          if (response?.returns) notify('returns', response.returns);
         } catch (e) {
           console.warn('⚠️ خطأ في تحديث الإرجاعات بعد الحذف:', e);
         }
@@ -378,7 +378,7 @@
         subscribers.inventory.add(cb);
         api.syncFromSheet('inventory')
           .then(response => {
-            const data = response?.data?.inventory || [];
+            const data = response?.inventory || [];
             cb(data);
           })
           .catch(() => cb([]));
@@ -388,7 +388,7 @@
         subscribers.loans.add(cb);
         api.syncFromSheet('loans')
           .then(response => {
-            const data = response?.data?.loans || [];
+            const data = response?.loans || [];
             cb(data);
           })
           .catch(() => cb([]));
@@ -398,7 +398,7 @@
         subscribers.returns.add(cb);
         api.syncFromSheet('returns')
           .then(response => {
-            const data = response?.data?.returns || [];
+            const data = response?.returns || [];
             cb(data);
           })
           .catch(() => cb([]));
@@ -410,8 +410,4 @@
   }
 
   console.log('✅ تم تهيئة Google Sheets Sync مع المراقبة التلقائية');
-
 })();
-
-
-
