@@ -2,7 +2,7 @@
 (() => {
   // تهيئة المتغيرات العامة
   const state = {
-    SHEETS_URL: "https://script.google.com/macros/s/AKfycbxiva8TpiOvhsPLZYnIiYdvOAO-ik7R0YtSSjd80ZMdqosq4PF9QKeNTojExAreQE1N5Q/exec",
+    SHEETS_URL: "https://script.google.com/macros/s/AKfycbxmrCvzxsCkq_O8x82Zm9ZpAOU-5MWRIUs9vQPRrMqFRzv13ftQCOgqXcYd6lfXc6qZCw/exec",
     lastSyncTime: 0,
     syncCheckInterval: null,
     lastRowCount: 0,
@@ -397,6 +397,7 @@
   console.log('✅ تم تهيئة Google Sheets Sync مع المراقبة التلقائية');
 
 })();
+
 
 
 
