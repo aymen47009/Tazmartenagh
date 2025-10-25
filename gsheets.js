@@ -2,7 +2,7 @@
 (() => {
   // تهيئة المتغيرات العامة
   const state = {
-    SHEETS_URL: "https://script.google.com/macros/s/AKfycbz7nP69Ga7mi316yedbF1-oykx0GuiX1mpyJYMhYUdb0cEKagQNM4DNzDaIRRHAUIl-TA/exec",
+    SHEETS_URL: "https://script.google.com/macros/s/AKfycbym9AdHT0ZRhuEXnrEfFIDCIYTKN9jshioRm8NhXcrh6Psqy--cD-ifoivmFAmUuxiEwQ/exec",
     lastSyncTime: 0,
     syncCheckInterval: null,
     lastRowCount: 0,
@@ -75,11 +75,12 @@
       }
       try {
         const result = await fetchFromSheet({ type: dataType, t: Date.now() });
-        if (!result) {
+        if (!result || !result.data) {
           throw new Error('لم يتم استلام بيانات صالحة');
         }
         console.log('✅ تم استلام البيانات بنجاح');
-        return result;
+        // Return only the data portion, not the full response
+        return result.data;
       } catch (error) {
         console.error('❌ خطأ في استرجاع البيانات:', error);
         throw error;
@@ -404,6 +405,4 @@
   }
 
   console.log('✅ تم تهيئة Google Sheets Sync مع المراقبة التلقائية');
-
 })();
-
