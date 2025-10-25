@@ -2,7 +2,7 @@
 (() => {
   // تهيئة المتغيرات العامة
   const state = {
-    SHEETS_URL: "https://script.google.com/macros/s/AKfycbybVRkGd6nIfnW4A2CRHNTd95vhGQVaRxC3gm-_BOyfBrB9FLRU9_l-uSHX_v9ZbOt3bg/exec",
+    SHEETS_URL: "https://script.google.com/macros/s/AKfycbym9AdHT0ZRhuEXnrEfFIDCIYTKN9jshioRm8NhXcrh6Psqy--cD-ifoivmFAmUuxiEwQ/exec",
     lastSyncTime: 0,
     syncCheckInterval: null,
     lastRowCount: 0,
@@ -303,8 +303,8 @@
         const rec = { ...item, id: item.id || genId('i') };
         await api.postToSheet({ type: 'inventory_add', timestamp: new Date().toISOString(), data: rec });
         try {
-          const data = await api.syncFromSheet('inventory');
-          if (data) notify('inventory', data);
+          const response = await api.syncFromSheet('inventory');
+          if (response?.data?.inventory) notify('inventory', response.data.inventory);
         } catch (e) {
           console.warn('⚠️ خطأ في تحديث البيانات بعد الإضافة:', e);
         }
@@ -313,8 +313,8 @@
       updateInventory: async (id, changes) => {
         await api.postToSheet({ type: 'inventory_update', timestamp: new Date().toISOString(), id, changes });
         try {
-          const data = await api.syncFromSheet('inventory');
-          if (data) notify('inventory', data);
+          const response = await api.syncFromSheet('inventory');
+          if (response?.data?.inventory) notify('inventory', response.data.inventory);
         } catch (e) {
           console.warn('⚠️ خطأ في تحديث البيانات بعد التعديل:', e);
         }
@@ -322,8 +322,8 @@
       deleteInventory: async (id) => {
         await api.postToSheet({ type: 'inventory_delete', timestamp: new Date().toISOString(), id });
         try {
-          const data = await api.syncFromSheet('inventory');
-          if (data) notify('inventory', data);
+          const response = await api.syncFromSheet('inventory');
+          if (response?.data?.inventory) notify('inventory', response.data.inventory);
         } catch (e) {
           console.warn('⚠️ خطأ في تحديث البيانات بعد الحذف:', e);
         }
@@ -332,8 +332,8 @@
         const r = { ...rec, id: rec.id || genId('l') };
         await api.postToSheet({ type: 'loan_add', timestamp: new Date().toISOString(), data: r });
         try {
-          const data = await api.syncFromSheet('loans');
-          if (data) notify('loans', data);
+          const response = await api.syncFromSheet('loans');
+          if (response?.data?.loans) notify('loans', response.data.loans);
         } catch (e) {
           console.warn('⚠️ خطأ في تحديث السلفيات بعد الإضافة:', e);
         }
@@ -342,8 +342,8 @@
       deleteLoan: async (id) => {
         await api.postToSheet({ type: 'loan_delete', timestamp: new Date().toISOString(), id });
         try {
-          const data = await api.syncFromSheet('loans');
-          if (data) notify('loans', data);
+          const response = await api.syncFromSheet('loans');
+          if (response?.data?.loans) notify('loans', response.data.loans);
         } catch (e) {
           console.warn('⚠️ خطأ في تحديث السلفيات بعد الحذف:', e);
         }
@@ -352,8 +352,8 @@
         const r = { ...rec, id: rec.id || genId('r') };
         await api.postToSheet({ type: 'return_add', timestamp: new Date().toISOString(), data: r });
         try {
-          const data = await api.syncFromSheet('returns');
-          if (data) notify('returns', data);
+          const response = await api.syncFromSheet('returns');
+          if (response?.data?.returns) notify('returns', response.data.returns);
         } catch (e) {
           console.warn('⚠️ خطأ في تحديث الإرجاعات بعد الإضافة:', e);
         }
@@ -362,8 +362,8 @@
       deleteReturn: async (id) => {
         await api.postToSheet({ type: 'return_delete', timestamp: new Date().toISOString(), id });
         try {
-          const data = await api.syncFromSheet('returns');
-          if (data) notify('returns', data);
+          const response = await api.syncFromSheet('returns');
+          if (response?.data?.returns) notify('returns', response.data.returns);
         } catch (e) {
           console.warn('⚠️ خطأ في تحديث الإرجاعات بعد الحذف:', e);
         }
@@ -371,21 +371,30 @@
       subscribeInventory: (cb) => {
         subscribers.inventory.add(cb);
         api.syncFromSheet('inventory')
-          .then(data => data && cb(data))
+          .then(response => {
+            const data = response?.data?.inventory || [];
+            cb(data);
+          })
           .catch(() => cb([]));
         return () => subscribers.inventory.delete(cb);
       },
       subscribeLoans: (cb) => {
         subscribers.loans.add(cb);
         api.syncFromSheet('loans')
-          .then(data => data && cb(data))
+          .then(response => {
+            const data = response?.data?.loans || [];
+            cb(data);
+          })
           .catch(() => cb([]));
         return () => subscribers.loans.delete(cb);
       },
       subscribeReturns: (cb) => {
         subscribers.returns.add(cb);
         api.syncFromSheet('returns')
-          .then(data => data && cb(data))
+          .then(response => {
+            const data = response?.data?.returns || [];
+            cb(data);
+          })
           .catch(() => cb([]));
         return () => subscribers.returns.delete(cb);
       }
@@ -395,18 +404,4 @@
   }
 
   console.log('✅ تم تهيئة Google Sheets Sync مع المراقبة التلقائية');
-
 })();
-
-
-
-
-
-
-
-
-
-
-
-
-
