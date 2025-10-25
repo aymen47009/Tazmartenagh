@@ -75,10 +75,15 @@
       }
       try {
         const result = await fetchFromSheet({ type: dataType, t: Date.now() });
+        console.log('📦 Raw result from server:', result);
         if (!result || !result.data) {
           throw new Error('لم يتم استلام بيانات صالحة');
         }
         console.log('✅ تم استلام البيانات بنجاح');
+        console.log('📊 Extracted data:', result.data);
+        console.log('📊 Inventory count:', (result.data.inventory || []).length);
+        console.log('📊 Loans count:', (result.data.loans || []).length);
+        console.log('📊 Returns count:', (result.data.returns || []).length);
         // Return only the data portion, not the full response
         return result.data;
       } catch (error) {
